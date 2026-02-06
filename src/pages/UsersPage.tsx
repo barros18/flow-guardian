@@ -1,0 +1,124 @@
+import { useState } from "react";
+import { mockUsers } from "@/data/mockData";
+import { User, UserRole } from "@/data/types";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { UserPlus, Trash2, Shield, Code, Eye } from "lucide-react";
+import { motion } from "framer-motion";
+import { toast } from "sonner";
+
+const roleConfig: Record<UserRole, { label: string; icon: React.ElementType; color: string }> = {
+  admin: { label: "Admin", icon: Shield, color: "text-primary bg-primary/15" },
+  lead: { label: "Tech Lead", icon: Eye, color: "text-warning bg-warning/15" },
+  developer: { label: "Developer", icon: Code, color: "text-success bg-success/15" },
+};
+
+export default function UsersPage() {
+  const [users, setUsers] = useState<User[]>(mockUsers);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const handleRoleChange = (userId: string, role: UserRole) => {
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)));
+    toast.success("Papel atualizado!");
+  };
+
+  const handleInvite = () => {
+    if (!inviteEmail) return;
+    toast.success(`Convite enviado para ${inviteEmail}`);
+    setInviteEmail("");
+    setOpen(false);
+  };
+
+  const handleRemove = (userId: string) => {
+    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    toast.success("Usuário removido");
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold mb-1">Usuários</h1>
+          <p className="text-sm text-muted-foreground">Gerencie os membros da organização</p>
+        </div>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button className="gradient-primary border-0 gap-2">
+              <UserPlus className="h-4 w-4" /> Convidar
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Convidar usuário</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              <Input
+                placeholder="email@empresa.com"
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+              />
+              <Button onClick={handleInvite} className="w-full gradient-primary border-0">
+                Enviar convite
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-4 px-5 py-3 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          <span>Nome</span>
+          <span>Email</span>
+          <span>Papel</span>
+          <span>Ação</span>
+        </div>
+        {users.map((user, i) => {
+          const rc = roleConfig[user.role];
+          const Icon = rc.icon;
+          return (
+            <motion.div
+              key={user.id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: i * 0.05 }}
+              className="grid grid-cols-[1fr_1fr_auto_auto] gap-4 items-center px-5 py-4 border-b border-border last:border-0 hover:bg-accent/50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20 text-xs font-semibold text-primary">
+                  {user.avatar}
+                </div>
+                <span className="text-sm font-medium">{user.name}</span>
+              </div>
+              <span className="text-sm text-muted-foreground">{user.email}</span>
+              <Select
+                value={user.role}
+                onValueChange={(val) => handleRoleChange(user.id, val as UserRole)}
+              >
+                <SelectTrigger className="w-36 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="lead">Tech Lead</SelectItem>
+                  <SelectItem value="developer">Developer</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => handleRemove(user.id)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
