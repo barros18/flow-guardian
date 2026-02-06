@@ -140,8 +140,9 @@ export default function LoginPage() {
             </p>
             <div className="space-y-2">
               {[
-                { email: "admin@devsync.io", name: "Ana Silva", role: "Admin" },
-                { email: "lead@devsync.io", name: "Carlos Lima", role: "Tech Lead" },
+                { email: "admin@devsync.io", name: "Ana Silva", role: "Admin", path: "/onboarding" },
+                { email: "lead@devsync.io", name: "Carlos Lima", role: "Tech Lead", path: "/dashboard" },
+                { email: "dev@devsync.io", name: "Pedro Santos", role: "Developer", path: "/dashboard" },
               ].map((user) => (
                 <button
                   key={user.email}
@@ -149,7 +150,7 @@ export default function LoginPage() {
                   onClick={() => {
                     setEmail(user.email);
                     setLoading(true);
-                    setTimeout(() => navigate("/dashboard"), 600);
+                    setTimeout(() => navigate(user.path), 600);
                   }}
                   className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2.5 text-left transition-all hover:border-primary/30 hover:bg-accent"
                 >
