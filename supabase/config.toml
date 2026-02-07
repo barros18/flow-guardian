@@ -1,1 +1,7 @@
 project_id = "iaucpiiptenjomzmseiv"
+
+[functions.oauth-callback]
+verify_jwt = false
+
+[functions.integrations-data]
+verify_jwt = false

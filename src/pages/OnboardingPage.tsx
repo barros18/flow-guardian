@@ -1,24 +1,43 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Github, Check, MessageSquare, ArrowRight, Zap } from "lucide-react";
+import { Github, Check, MessageSquare, ArrowRight, Zap, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useIntegrations } from "@/hooks/useIntegrations";
 
 type Step = 1 | 2 | 3 | 4;
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [step, setStep] = useState<Step>(1);
   const [orgName, setOrgName] = useState("");
-  const [connected, setConnected] = useState({ github: false, jira: false, slack: false });
+  const { status: connected, loading, getOAuthUrl, fetchStatus } = useIntegrations();
 
-  const handleConnect = (service: "github" | "jira" | "slack") => {
-    setTimeout(() => {
-      setConnected((prev) => ({ ...prev, [service]: true }));
-      toast.success(`${service.charAt(0).toUpperCase() + service.slice(1)} conectado!`);
-    }, 600);
+  // Handle OAuth callback redirect
+  useEffect(() => {
+    const connectedProvider = searchParams.get("connected");
+    if (connectedProvider) {
+      toast.success(`${connectedProvider.charAt(0).toUpperCase() + connectedProvider.slice(1)} conectado!`);
+      fetchStatus();
+      // Move to appropriate step
+      if (connectedProvider === "github") setStep(3);
+      else if (connectedProvider === "slack" || connectedProvider === "jira") setStep(3);
+    }
+  }, [searchParams, fetchStatus]);
+
+  const handleConnect = (provider: "github" | "slack" | "jira") => {
+    // For demo mode (no real auth), simulate connection
+    const userId = "demo-user";
+    const url = getOAuthUrl(provider, userId);
+    if (url && !url.includes("client_id=&") && !url.includes("client_id=undefined")) {
+      window.location.href = url;
+    } else {
+      // Fallback: simulate connection for demo
+      toast.success(`${provider.charAt(0).toUpperCase() + provider.slice(1)} conectado! (modo demo)`);
+    }
   };
 
   const handleFinish = () => {
@@ -85,6 +104,7 @@ export default function OnboardingPage() {
             >
               {connected.github ? <Check className="h-4 w-4" /> : <Github className="h-4 w-4" />}
               {connected.github ? "GitHub conectado" : "Conectar GitHub"}
+              {!connected.github && <ExternalLink className="h-3 w-3 ml-auto opacity-50" />}
             </Button>
             <Button
               className="w-full h-11 gradient-primary border-0 gap-2"
@@ -93,6 +113,13 @@ export default function OnboardingPage() {
             >
               Continuar <ArrowRight className="h-4 w-4" />
             </Button>
+            <button
+              type="button"
+              onClick={() => setStep(3)}
+              className="w-full mt-3 text-xs text-muted-foreground hover:text-foreground text-center transition-colors"
+            >
+              Pular por agora
+            </button>
           </motion.div>
         )}
 
@@ -109,6 +136,7 @@ export default function OnboardingPage() {
               >
                 {connected.jira ? <Check className="h-4 w-4" /> : null}
                 {connected.jira ? "Jira conectado" : "Conectar Jira"}
+                {!connected.jira && <ExternalLink className="h-3 w-3 ml-auto opacity-50" />}
               </Button>
               <Button
                 variant={connected.slack ? "outline" : "default"}
@@ -118,6 +146,7 @@ export default function OnboardingPage() {
               >
                 {connected.slack ? <Check className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
                 {connected.slack ? "Slack conectado" : "Conectar Slack"}
+                {!connected.slack && <ExternalLink className="h-3 w-3 ml-auto opacity-50" />}
               </Button>
             </div>
             <Button className="w-full h-11 gradient-primary border-0 gap-2" onClick={() => setStep(4)}>
@@ -135,9 +164,23 @@ export default function OnboardingPage() {
               <Check className="h-8 w-8 text-primary-foreground" />
             </div>
             <h2 className="text-xl font-bold mb-2">Tudo pronto!</h2>
-            <p className="text-sm text-muted-foreground mb-8">
+            <p className="text-sm text-muted-foreground mb-4">
               O DevSync vai monitorar seus repositórios e enviar alertas automaticamente.
             </p>
+            <div className="flex flex-wrap justify-center gap-2 mb-8">
+              {connected.github && (
+                <span className="text-xs bg-success/10 text-success px-3 py-1 rounded-full">✓ GitHub</span>
+              )}
+              {connected.jira && (
+                <span className="text-xs bg-success/10 text-success px-3 py-1 rounded-full">✓ Jira</span>
+              )}
+              {connected.slack && (
+                <span className="text-xs bg-success/10 text-success px-3 py-1 rounded-full">✓ Slack</span>
+              )}
+              {!connected.github && !connected.jira && !connected.slack && (
+                <span className="text-xs text-muted-foreground">Nenhuma integração conectada (pode configurar depois)</span>
+              )}
+            </div>
             <Button className="w-full h-11 gradient-primary border-0 gap-2" onClick={handleFinish}>
               Ir para o Dashboard <ArrowRight className="h-4 w-4" />
             </Button>
