@@ -11,6 +11,7 @@ import PRDetailPage from "./pages/PRDetailPage";
 import AlertsPage from "./pages/AlertsPage";
 import RulesPage from "./pages/RulesPage";
 import UsersPage from "./pages/UsersPage";
+import IntegrationsPage from "./pages/IntegrationsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/rules" element={<RulesPage />} />
             <Route path="/users" element={<UsersPage />} />
+            <Route path="/integrations" element={<IntegrationsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

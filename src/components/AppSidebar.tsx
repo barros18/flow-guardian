@@ -1,10 +1,11 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Bell, Settings, Users, Zap, LogOut } from "lucide-react";
+import { LayoutDashboard, Bell, Settings, Users, Zap, LogOut, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/alerts", label: "Alertas", icon: Bell },
+  { to: "/integrations", label: "Integrações", icon: Plug },
   { to: "/rules", label: "Regras", icon: Settings },
   { to: "/users", label: "Usuários", icon: Users },
 ];
