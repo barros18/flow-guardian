@@ -158,11 +158,19 @@ Deno.serve(async (req) => {
       ? new Date(Date.now() + tokenData.token.expires_in * 1000).toISOString()
       : null
 
+    // Get user's organization_id from profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('user_id', userId)
+      .single();
+
     const { error: dbError } = await supabase
       .from('integrations')
       .upsert(
         {
           user_id: userId,
+          organization_id: profile?.organization_id,
           provider,
           access_token: tokenData.token.access_token,
           refresh_token: tokenData.token.refresh_token || null,

@@ -6,7 +6,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  profile: { name: string; avatar: string; email: string } | null;
+  profile: { name: string; avatar: string; email: string; organization_id: string | null } | null;
   role: string | null;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, name: string) => Promise<{ error: Error | null }>;
@@ -28,7 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const [profileRes, roleRes] = await Promise.all([
         supabase
           .from("profiles")
-          .select("name, avatar, email")
+          .select("name, avatar, email, organization_id")
           .eq("user_id", userId)
           .single(),
         supabase
@@ -38,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .single()
       ]);
 
-      if (profileRes.data) setProfile(profileRes.data);
+      if (profileRes.data) setProfile(profileRes.data as any);
       if (roleRes.data) setRole(roleRes.data.role);
     } catch (error) {
       console.error("Error fetching profile/role:", error);

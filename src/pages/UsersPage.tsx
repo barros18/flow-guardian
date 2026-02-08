@@ -32,6 +32,7 @@ interface User {
 
 interface ProfileWithRole extends User {
   user_id: string;
+  organization_id: string | null;
 }
 
 interface AuditLog {
@@ -58,9 +59,13 @@ export default function UsersPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   const fetchUsers = async () => {
+    if (!currentUser?.organization_id) return;
     setLoading(true);
     try {
-      const { data: profiles, error: pError } = await supabase.from("profiles").select("*");
+      const { data: profiles, error: pError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("organization_id", currentUser.organization_id);
       if (pError) throw pError;
 
       const { data: roles, error: rError } = await supabase.from("user_roles").select("*");
@@ -69,6 +74,7 @@ export default function UsersPage() {
       const mappedUsers = profiles.map(p => ({
         id: p.id,
         user_id: p.user_id,
+        organization_id: p.organization_id,
         name: p.name,
         email: p.email,
         avatar: p.avatar,
