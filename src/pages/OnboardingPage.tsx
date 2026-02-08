@@ -7,14 +7,17 @@ import { Github, Check, MessageSquare, ArrowRight, Zap, ExternalLink, AlertCircl
 import { toast } from "sonner";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 type Step = 1 | 2 | 3 | 4;
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
+  const { user, profile } = useAuth();
   const [searchParams] = useSearchParams();
   const [step, setStep] = useState<Step>(1);
   const [orgName, setOrgName] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
   const { status: connected, loading, getOAuthUrl, fetchStatus, isProviderConfigured } = useIntegrations();
 
   useEffect(() => {
@@ -104,9 +107,55 @@ export default function OnboardingPage() {
           <motion.div key="s1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
             <h2 className="text-xl font-bold mb-2">Nome da organização</h2>
             <p className="text-sm text-muted-foreground mb-6">Como seu time/empresa será identificado</p>
-            <Input placeholder="Ex: Acme Corp" value={orgName} onChange={(e) => setOrgName(e.target.value)} className="h-11 mb-4" />
-            <Button className="w-full h-11 gradient-primary border-0 gap-2" disabled={!orgName} onClick={() => setStep(2)}>
-              Continuar <ArrowRight className="h-4 w-4" />
+            <Input
+              placeholder="Ex: Acme Corp"
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              className="h-11 mb-4"
+              disabled={isCreating}
+            />
+            <Button
+              className="w-full h-11 gradient-primary border-0 gap-2"
+              disabled={!orgName || isCreating}
+              onClick={async () => {
+                if (profile?.organization_id) {
+                  setStep(2);
+                  return;
+                }
+
+                setIsCreating(true);
+                try {
+                  // Fallback manual creation if trigger failed or for old users
+                  const { data: org, error: orgError } = await supabase
+                    .from("organizations")
+                    .insert({ name: orgName })
+                    .select()
+                    .single();
+
+                  if (orgError) throw orgError;
+
+                  await Promise.all([
+                    supabase.from("organization_members").insert({
+                      user_id: user?.id,
+                      organization_id: org.id,
+                      role: 'admin'
+                    }),
+                    supabase.from("profiles").update({
+                      organization_id: org.id
+                    }).eq("user_id", user?.id)
+                  ]);
+
+                  toast.success("Workspace criado com sucesso!");
+                  setStep(2);
+                } catch (err) {
+                  console.error("Error creating org:", err);
+                  toast.error("Falha ao criar workspace. Tente novamente.");
+                } finally {
+                  setIsCreating(false);
+                }
+              }}
+            >
+              {isCreating ? "Criando..." : "Continuar"} <ArrowRight className="h-4 w-4" />
             </Button>
           </motion.div>
         )}
