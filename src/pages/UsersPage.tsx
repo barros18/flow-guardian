@@ -1,32 +1,8 @@
-import { useState } from "react";
-import { mockUsers } from "@/data/mockData";
-import { User, UserRole } from "@/data/types";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { UserPlus, Trash2, Shield, Code, Eye, Clock } from "lucide-react";
-import { motion } from "framer-motion";
-import { toast } from "sonner";
-import { formatDistanceToNow } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
-interface AuditLog {
-  id: string;
-  action: string;
-  user: string;
-  target: string;
-  timestamp: Date;
+interface ProfileWithRole extends User {
+  user_id: string;
 }
 
 const roleConfig: Record<UserRole, { label: string; icon: React.ElementType; color: string }> = {
@@ -36,18 +12,51 @@ const roleConfig: Record<UserRole, { label: string; icon: React.ElementType; col
 };
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const { profile: currentUser } = useAuth();
+  const [users, setUsers] = useState<ProfileWithRole[]>([]);
+  const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
   const [open, setOpen] = useState(false);
-  const [removeTarget, setRemoveTarget] = useState<User | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<ProfileWithRole | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const { data: profiles, error: pError } = await supabase.from("profiles").select("*");
+      if (pError) throw pError;
+
+      const { data: roles, error: rError } = await supabase.from("user_roles").select("*");
+      if (rError) throw rError;
+
+      const mappedUsers = profiles.map(p => ({
+        id: p.id,
+        user_id: p.user_id,
+        name: p.name,
+        email: p.email,
+        avatar: p.avatar,
+        role: (roles.find(r => r.user_id === p.user_id)?.role || "developer") as UserRole
+      }));
+
+      setUsers(mappedUsers);
+    } catch (error: any) {
+      console.error("Error fetching users:", error);
+      toast.error("Erro ao carregar usuários");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
   const addLog = (action: string, target: string) => {
     setAuditLogs((prev) => [
       {
         id: `log-${Date.now()}`,
         action,
-        user: "Ana Silva",
+        user: currentUser?.name || "Sistema",
         target,
         timestamp: new Date(),
       },
@@ -55,11 +64,21 @@ export default function UsersPage() {
     ]);
   };
 
-  const handleRoleChange = (userId: string, role: UserRole) => {
-    const user = users.find((u) => u.id === userId);
-    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)));
-    addLog(`Papel alterado para ${roleConfig[role].label}`, user?.name || "");
-    toast.success("Papel atualizado!");
+  const handleRoleChange = async (userId: string, targetUserId: string, role: UserRole) => {
+    try {
+      const { error } = await supabase
+        .from("user_roles")
+        .upsert({ user_id: targetUserId, role }, { onConflict: "user_id,role" });
+
+      if (error) throw error;
+
+      const user = users.find((u) => u.user_id === targetUserId);
+      setUsers((prev) => prev.map((u) => (u.user_id === targetUserId ? { ...u, role } : u)));
+      addLog(`Papel alterado para ${roleConfig[role].label}`, user?.name || "");
+      toast.success("Papel atualizado!");
+    } catch (error: any) {
+      toast.error("Erro ao atualizar papel: " + error.message);
+    }
   };
 
   const handleInvite = () => {
@@ -138,7 +157,7 @@ export default function UsersPage() {
               <span className="text-sm text-muted-foreground">{user.email}</span>
               <Select
                 value={user.role}
-                onValueChange={(val) => handleRoleChange(user.id, val as UserRole)}
+                onValueChange={(val) => handleRoleChange(user.id, user.user_id, val as UserRole)}
               >
                 <SelectTrigger className="w-36 h-8 text-xs">
                   <SelectValue />

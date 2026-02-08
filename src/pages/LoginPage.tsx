@@ -155,38 +155,6 @@ export default function LoginPage() {
             {isSignUp ? "Já tem conta? Entrar" : "Não tem conta? Criar agora"}
           </button>
 
-          {/* Test users */}
-          <div className="mt-8 rounded-xl border border-border bg-card p-4">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-              Usuários de teste
-            </p>
-            <div className="space-y-2">
-              {[
-                { email: "admin@devsync.io", password: "admin123456", name: "Ana Silva", role: "Admin" },
-                { email: "lead@devsync.io", password: "lead123456", name: "Carlos Lima", role: "Tech Lead" },
-                { email: "dev@devsync.io", password: "dev123456", name: "Pedro Santos", role: "Developer" },
-              ].map((u) => (
-                <button
-                  key={u.email}
-                  type="button"
-                  onClick={() => quickLogin(u.email, u.password)}
-                  disabled={loading}
-                  className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2.5 text-left transition-all hover:border-primary/30 hover:bg-accent disabled:opacity-50"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-[10px] font-semibold text-primary">
-                      {u.name.split(" ").map(n => n[0]).join("")}
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium">{u.name}</p>
-                      <p className="text-[11px] text-muted-foreground">{u.email}</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{u.role}</span>
-                </button>
-              ))}
-            </div>
-          </div>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
             Ao continuar, você concorda com os{" "}
