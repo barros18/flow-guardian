@@ -1,6 +1,7 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Bell, Settings, Users, Zap, LogOut, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -12,6 +13,17 @@ const navItems = [
 
 export function AppSidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { profile, role, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/login");
+  };
+
+  const displayName = profile?.name || "Usuário";
+  const displayAvatar = profile?.avatar || displayName.charAt(0).toUpperCase();
+  const displayRole = role === "admin" ? "Admin" : role === "lead" ? "Tech Lead" : "Developer";
 
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-border bg-card">
@@ -51,15 +63,15 @@ export function AppSidebar() {
       <div className="border-t border-border p-3">
         <div className="flex items-center gap-3 rounded-lg px-3 py-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20 text-xs font-semibold text-primary">
-            AS
+            {displayAvatar}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">Ana Silva</p>
-            <p className="text-xs text-muted-foreground truncate">Admin</p>
+            <p className="text-sm font-medium truncate">{displayName}</p>
+            <p className="text-xs text-muted-foreground truncate">{displayRole}</p>
           </div>
-          <Link to="/login" className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={handleSignOut} className="text-muted-foreground hover:text-foreground transition-colors">
             <LogOut className="h-4 w-4" />
-          </Link>
+          </button>
         </div>
       </div>
     </aside>
