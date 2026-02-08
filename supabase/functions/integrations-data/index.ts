@@ -14,7 +14,7 @@ const getEnv = (key: string) => {
   return value;
 };
 
-async function getIntegration(userId: string, provider: string) {
+async function getIntegration(orgId: string, provider: string) {
   const supabaseUrl = getEnv("SUPABASE_URL");
   const supabaseServiceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
   const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
@@ -22,7 +22,7 @@ async function getIntegration(userId: string, provider: string) {
   const { data, error } = await supabase
     .from("integrations")
     .select("*")
-    .eq("user_id", userId)
+    .eq("organization_id", orgId)
     .eq("provider", provider)
     .maybeSingle();
 
@@ -33,7 +33,7 @@ async function getIntegration(userId: string, provider: string) {
   return data;
 }
 
-async function refreshJiraToken(refreshToken: string, userId: string) {
+async function refreshJiraToken(refreshToken: string, orgId: string) {
   try {
     const clientId = getEnv("JIRA_CLIENT_ID");
     const clientSecret = getEnv("JIRA_CLIENT_SECRET");
@@ -69,7 +69,7 @@ async function refreshJiraToken(refreshToken: string, userId: string) {
         refresh_token: data.refresh_token || refreshToken,
         expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
       })
-      .eq("user_id", userId)
+      .eq("organization_id", orgId)
       .eq("provider", "jira");
 
     if (updateError) {
@@ -252,10 +252,23 @@ Deno.serve(async (req) => {
     }
 
     // --- Access Control Check ---
-    // We use service role to fetch the role reliably, as RLS might restrict users from reading roles table without specific policies.
-    // However, users should be able to read their own role. Let's use service key to be safe and avoid RLS loops here.
     const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
     const userRole = await getUserRole(user.id, adminSupabase);
+
+    // Get user's organization_id
+    const { data: profile } = await adminSupabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (!profile?.organization_id) {
+      return new Response(JSON.stringify({ error: "Usuário não vinculado a uma organização ativa." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const orgId = profile.organization_id;
 
     const url = new URL(req.url);
     const action = url.searchParams.get("action");
@@ -541,7 +554,7 @@ Deno.serve(async (req) => {
         const { data: currentIntegration } = await adminSupabase
           .from("integrations")
           .select("settings")
-          .eq("user_id", user.id)
+          .eq("organization_id", orgId)
           .eq("provider", provider)
           .single();
 
@@ -553,7 +566,7 @@ Deno.serve(async (req) => {
             settings: newSettings,
             updated_at: new Date().toISOString()
           })
-          .eq("user_id", user.id)
+          .eq("organization_id", orgId)
           .eq("provider", provider);
 
         if (updateError) {
@@ -636,7 +649,7 @@ Deno.serve(async (req) => {
         const { data: currentIntegration } = await adminSupabase
           .from("integrations")
           .select("settings")
-          .eq("user_id", user.id)
+          .eq("organization_id", orgId)
           .eq("provider", "slack")
           .single();
 
@@ -648,7 +661,7 @@ Deno.serve(async (req) => {
             settings: newSettings,
             updated_at: new Date().toISOString()
           })
-          .eq("user_id", user.id)
+          .eq("organization_id", orgId)
           .eq("provider", "slack");
 
         if (updateError) {
@@ -717,7 +730,7 @@ Deno.serve(async (req) => {
     // Developers need to read repositories/projects to link tasks.
     if (action === "data" && provider) {
       try {
-        const integration = await getIntegration(user.id, provider);
+        const integration = await getIntegration(orgId, provider);
 
         if (!integration || !integration.access_token) {
           console.warn(`No active ${provider} integration for user ${user.id}`);
@@ -742,7 +755,7 @@ Deno.serve(async (req) => {
           if (integration.refresh_token && provider === "jira") {
             console.log("Refreshing expired Jira token...");
             try {
-              accessToken = await refreshJiraToken(integration.refresh_token, user.id);
+              accessToken = await refreshJiraToken(integration.refresh_token, orgId);
             } catch (refreshError: any) {
               console.error("Failed to refresh Jira token:", refreshError);
               return new Response(JSON.stringify({

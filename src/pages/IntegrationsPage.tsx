@@ -1,9 +1,5 @@
-import { useState, useEffect } from "react";
-import { Github, MessageSquare, Check, ExternalLink, Loader2, Lock, Globe, FolderKanban, AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useIntegrations } from "@/hooks/useIntegrations";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
 
 interface GithubRepo {
   name: string;
@@ -30,20 +26,25 @@ interface JiraProject {
 }
 
 export default function IntegrationsPage() {
+  const { user, role } = useAuth();
   const { status, loading, getOAuthUrl, fetchProviderData, fetchStatus, isProviderConfigured } = useIntegrations();
+  const isAdmin = role === "admin";
   const [githubRepos, setGithubRepos] = useState<GithubRepo[]>([]);
   const [slackChannels, setSlackChannels] = useState<SlackChannel[]>([]);
   const [jiraProjects, setJiraProjects] = useState<JiraProject[]>([]);
   const [loadingData, setLoadingData] = useState({ github: false, slack: false, jira: false });
 
   const handleConnect = async (provider: "github" | "slack" | "jira") => {
+    if (!isAdmin) {
+      toast.error("Apenas administradores podem conectar novas integrações.");
+      return;
+    }
     if (!isProviderConfigured(provider)) {
       toast.warning(`Integração com ${provider} não está configurada. Verifique os Client IDs.`);
       return;
     }
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData?.session?.user?.id || "demo-user";
+      const userId = user?.id || "demo-user";
       const url = getOAuthUrl(provider, userId);
       if (url) {
         window.open(url, "_blank", "noopener,noreferrer");
@@ -92,8 +93,14 @@ export default function IntegrationsPage() {
     }
     return (
       <div className="flex flex-col items-end gap-1">
-        <Button size="sm" variant="outline" onClick={() => handleConnect(provider)} className="gap-1.5" disabled={!configured}>
-          Conectar <ExternalLink className="h-3 w-3" />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => handleConnect(provider)}
+          className="gap-1.5"
+          disabled={!configured || !isAdmin}
+        >
+          {isAdmin ? "Conectar" : "Somente Admin"} <ExternalLink className="h-3 w-3" />
         </Button>
         {!configured && (
           <span className="text-[10px] text-warning flex items-center gap-1">

@@ -154,23 +154,32 @@ Deno.serve(async (req) => {
     // Upsert integration using service role
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
+    // Get user's profile and organization_id
+    const [{ data: profile }, { data: roleData }] = await Promise.all([
+      supabase.from('profiles').select('organization_id').eq('user_id', userId).single(),
+      supabase.from('user_roles').select('role').eq('user_id', userId).single()
+    ]);
+
+    if (!profile?.organization_id) {
+      throw new Error('Usuário não pertence a uma organização.');
+    }
+
+    if (roleData?.role !== 'admin') {
+      throw new Error('Apenas administradores podem gerenciar integrações da organização.');
+    }
+
+    const orgId = profile.organization_id;
+
     const expiresAt = tokenData.token.expires_in
       ? new Date(Date.now() + tokenData.token.expires_in * 1000).toISOString()
       : null
 
-    // Get user's organization_id from profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id')
-      .eq('user_id', userId)
-      .single();
 
     const { error: dbError } = await supabase
       .from('integrations')
       .upsert(
         {
-          user_id: userId,
-          organization_id: profile?.organization_id,
+          organization_id: orgId,
           provider,
           access_token: tokenData.token.access_token,
           refresh_token: tokenData.token.refresh_token || null,
@@ -178,7 +187,7 @@ Deno.serve(async (req) => {
           external_account_id: tokenData.externalId,
           scopes: tokenData.scopes,
         },
-        { onConflict: 'user_id,provider' }
+        { onConflict: 'organization_id,provider' }
       )
 
     if (dbError) {
