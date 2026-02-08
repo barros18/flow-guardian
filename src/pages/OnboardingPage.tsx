@@ -13,11 +13,17 @@ type Step = 1 | 2 | 3 | 4;
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [searchParams] = useSearchParams();
   const [step, setStep] = useState<Step>(1);
   const [orgName, setOrgName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+
+  // Team state
+  const [members, setMembers] = useState<{ email: string; role: string }[]>([]);
+  const [newMemberEmail, setNewMemberEmail] = useState("");
+  const [newMemberRole, setNewMemberRole] = useState("developer");
+
   const { status: connected, loading, getOAuthUrl, fetchStatus, isProviderConfigured } = useIntegrations();
 
   useEffect(() => {
@@ -25,7 +31,7 @@ export default function OnboardingPage() {
     if (connectedProvider) {
       toast.success(`${connectedProvider.charAt(0).toUpperCase() + connectedProvider.slice(1)} conectado!`);
       fetchStatus();
-      if (connectedProvider === "github") setStep(3);
+      if (connectedProvider === "github") setStep(3); // Updated step reference
       else if (connectedProvider === "slack" || connectedProvider === "jira") setStep(3);
     }
   }, [searchParams, fetchStatus]);
@@ -105,10 +111,10 @@ export default function OnboardingPage() {
 
         {step === 1 && (
           <motion.div key="s1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-            <h2 className="text-xl font-bold mb-2">Nome da organização</h2>
-            <p className="text-sm text-muted-foreground mb-6">Como seu time/empresa será identificado</p>
+            <h2 className="text-xl font-bold mb-2">Configure seu Workspace</h2>
+            <p className="text-sm text-muted-foreground mb-6">Dê um nome para a sua organização ou time.</p>
             <Input
-              placeholder="Ex: Acme Corp"
+              placeholder="Ex: Acme Corp ou Time de Engenharia"
               value={orgName}
               onChange={(e) => setOrgName(e.target.value)}
               className="h-11 mb-4"
@@ -125,7 +131,7 @@ export default function OnboardingPage() {
 
                 setIsCreating(true);
                 try {
-                  // Fallback manual creation if trigger failed or for old users
+                  // Create Org
                   const { data: org, error: orgError } = await supabase
                     .from("organizations")
                     .insert({ name: orgName })
@@ -134,6 +140,7 @@ export default function OnboardingPage() {
 
                   if (orgError) throw orgError;
 
+                  // Add self as admin
                   await Promise.all([
                     supabase.from("organization_members").insert({
                       user_id: user?.id,
@@ -145,11 +152,12 @@ export default function OnboardingPage() {
                     }).eq("user_id", user?.id)
                   ]);
 
-                  toast.success("Workspace criado com sucesso!");
+                  await refreshProfile();
+                  toast.success("Workspace criado!");
                   setStep(2);
                 } catch (err) {
                   console.error("Error creating org:", err);
-                  toast.error("Falha ao criar workspace. Tente novamente.");
+                  toast.error("Falha ao criar workspace.");
                 } finally {
                   setIsCreating(false);
                 }
@@ -162,32 +170,91 @@ export default function OnboardingPage() {
 
         {step === 2 && (
           <motion.div key="s2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-            <h2 className="text-xl font-bold mb-2">Conectar GitHub</h2>
-            <p className="text-sm text-muted-foreground mb-6">Selecione os repositórios para monitorar</p>
-            <div className="mb-4">
-              <ConnectButton provider="github" label="GitHub" icon={Github} connected={connected.github} />
+            <h2 className="text-xl font-bold mb-2">Convide seu time</h2>
+            <p className="text-sm text-muted-foreground mb-6">Adicione colaboradores ao seu workspace.</p>
+
+            <div className="space-y-3 mb-6">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="email@empresa.com"
+                  value={newMemberEmail}
+                  onChange={(e) => setNewMemberEmail(e.target.value)}
+                  className="flex-1"
+                />
+                <select
+                  value={newMemberRole}
+                  onChange={(e) => setNewMemberRole(e.target.value)}
+                  className="bg-muted border border-border rounded-md px-2 text-xs font-medium"
+                >
+                  <option value="developer">Dev</option>
+                  <option value="lead">Lead</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (newMemberEmail && !members.find(m => m.email === newMemberEmail)) {
+                      setMembers([...members, { email: newMemberEmail, role: newMemberRole }]);
+                      setNewMemberEmail("");
+                    }
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+
+              {members.length > 0 && (
+                <div className="border border-border rounded-lg divide-y divide-border overflow-hidden">
+                  {members.map((member, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-card/50">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{member.email}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase">{member.role}</p>
+                      </div>
+                      <button
+                        onClick={() => setMembers(members.filter((_, idx) => idx !== i))}
+                        className="text-muted-foreground hover:text-destructive p-1"
+                      >
+                        <Zap className="h-4 w-4 rotate-45" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <Button className="w-full h-11 gradient-primary border-0 gap-2" disabled={!connected.github} onClick={() => setStep(3)}>
+
+            <Button
+              className="w-full h-11 gradient-primary border-0 gap-2"
+              onClick={() => setStep(3)}
+            >
               Continuar <ArrowRight className="h-4 w-4" />
             </Button>
-            <button type="button" onClick={() => setStep(3)} className="w-full mt-3 text-xs text-muted-foreground hover:text-foreground text-center transition-colors">
-              Pular por agora
+
+            <button
+              type="button"
+              onClick={() => setStep(3)}
+              className="w-full mt-3 text-xs text-muted-foreground hover:text-foreground text-center transition-colors"
+            >
+              Adicionar mais tarde
             </button>
           </motion.div>
         )}
 
         {step === 3 && (
           <motion.div key="s3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-            <h2 className="text-xl font-bold mb-2">Conectar Jira & Slack</h2>
-            <p className="text-sm text-muted-foreground mb-6">Vincule tarefas e receba alertas</p>
+            <h2 className="text-xl font-bold mb-2">Conectar Integrações</h2>
+            <p className="text-sm text-muted-foreground mb-6">Vincule suas ferramentas de trabalho.</p>
             <div className="space-y-3 mb-6">
+              <ConnectButton provider="github" label="GitHub" icon={Github} connected={connected.github} />
               <ConnectButton provider="jira" label="Jira" icon={ExternalLink} connected={connected.jira} />
               <ConnectButton provider="slack" label="Slack" icon={MessageSquare} connected={connected.slack} />
             </div>
             <Button className="w-full h-11 gradient-primary border-0 gap-2" onClick={() => setStep(4)}>
-              Continuar <ArrowRight className="h-4 w-4" />
+              Próximo <ArrowRight className="h-4 w-4" />
             </Button>
-            <p className="text-xs text-muted-foreground mt-3 text-center">Não se preocupe, você pode reconectar depois</p>
+            <button type="button" onClick={() => setStep(4)} className="w-full mt-3 text-xs text-muted-foreground hover:text-foreground text-center transition-colors">
+              Pular por agora
+            </button>
           </motion.div>
         )}
 
