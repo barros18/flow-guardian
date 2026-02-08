@@ -16,5 +16,14 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
+  // If user has no organization and is not already on onboarding, redirect there
+  // This is a safety measure for manual registrations or migration edge cases
+  const { profile } = useAuth();
+  const isExcludedPath = window.location.pathname === "/onboarding";
+
+  if (profile && !profile.organization_id && !isExcludedPath) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
   return <>{children}</>;
 }

@@ -24,22 +24,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfileAndRole = async (userId: string) => {
     try {
-      // Fetch profile and role in parallel
       const [profileRes, roleRes] = await Promise.all([
         supabase
           .from("profiles")
           .select("name, avatar, email, organization_id")
           .eq("user_id", userId)
-          .single(),
+          .maybeSingle(),
         supabase
           .from("user_roles")
           .select("role")
           .eq("user_id", userId)
-          .single()
+          .maybeSingle()
       ]);
 
-      if (profileRes.data) setProfile(profileRes.data as any);
-      if (roleRes.data) setRole(roleRes.data.role);
+      if (profileRes.data) {
+        setProfile(profileRes.data as any);
+      } else {
+        console.warn("Profile not found for user:", userId);
+        setProfile(null);
+      }
+
+      if (roleRes.data) {
+        setRole(roleRes.data.role);
+      } else {
+        // Fallback role if not found
+        setRole("member");
+      }
     } catch (error) {
       console.error("Error fetching profile/role:", error);
     } finally {
