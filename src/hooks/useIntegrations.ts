@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-const SUPABASE_URL = "https://iaucpiiptenjomzmseiv.supabase.co";
-
 export interface IntegrationStatus {
   github: boolean;
   slack: boolean;
   jira: boolean;
 }
+
+const GITHUB_CLIENT_ID = import.meta.env.VITE_GITHUB_CLIENT_ID || "";
+const SLACK_CLIENT_ID = import.meta.env.VITE_SLACK_CLIENT_ID || "";
+const JIRA_CLIENT_ID = import.meta.env.VITE_JIRA_CLIENT_ID || "";
 
 export function useIntegrations() {
   const [status, setStatus] = useState<IntegrationStatus>({ github: false, slack: false, jira: false });
@@ -15,23 +17,29 @@ export function useIntegrations() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const { data, error } = await supabase.functions.invoke("integrations-data", {
-        body: null,
-        headers: { "Content-Type": "application/json" },
-      });
-      // Use query params approach via GET-like invocation
       const { data: session } = await supabase.auth.getSession();
       if (!session?.session) {
         setLoading(false);
         return;
       }
 
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/integrations-data?action=status`, {
-        headers: {
-          Authorization: `Bearer ${session.session.access_token}`,
-          apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhdWNwaWlwdGVuam9tem1zZWl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzODY5ODcsImV4cCI6MjA4NTk2Mjk4N30.nGqF1j2fnsLkFX_i3vC67RMCoWXIekwOfy4xw6PYfC8",
-        },
+      const { data, error } = await supabase.functions.invoke("integrations-data", {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        body: null,
       });
+
+      // The edge function uses query params, so we need a direct fetch
+      const res = await fetch(
+        `https://iaucpiiptenjomzmseiv.supabase.co/functions/v1/integrations-data?action=status`,
+        {
+          headers: {
+            Authorization: `Bearer ${session.session.access_token}`,
+            apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhdWNwaWlwdGVuam9tem1zZWl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzODY5ODcsImV4cCI6MjA4NTk2Mjk4N30.nGqF1j2fnsLkFX_i3vC67RMCoWXIekwOfy4xw6PYfC8",
+          },
+        }
+      );
+      if (!res.ok) throw new Error(`Status fetch failed: ${res.status}`);
       const result = await res.json();
       if (result.status) {
         setStatus(result.status);
@@ -47,35 +55,57 @@ export function useIntegrations() {
     fetchStatus();
   }, [fetchStatus]);
 
+  const isProviderConfigured = useCallback((provider: "github" | "slack" | "jira"): boolean => {
+    switch (provider) {
+      case "github": return !!GITHUB_CLIENT_ID;
+      case "slack": return !!SLACK_CLIENT_ID;
+      case "jira": return !!JIRA_CLIENT_ID;
+    }
+  }, []);
+
   const getOAuthUrl = useCallback((provider: "github" | "slack" | "jira", userId: string) => {
-    const callbackUrl = `${SUPABASE_URL}/functions/v1/oauth-callback`;
+    if (!isProviderConfigured(provider)) return null;
+
+    const callbackUrl = `https://iaucpiiptenjomzmseiv.supabase.co/functions/v1/oauth-callback`;
     const appUrl = window.location.origin;
     const redirectUri = `${callbackUrl}?provider=${provider}&user_id=${userId}&app_url=${encodeURIComponent(appUrl)}`;
 
     switch (provider) {
       case "github":
-        return `https://github.com/login/oauth/authorize?client_id=${import.meta.env.VITE_GITHUB_CLIENT_ID || ""}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo,read:user`;
+        return `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo,read:user`;
       case "slack":
-        return `https://slack.com/oauth/v2/authorize?client_id=${import.meta.env.VITE_SLACK_CLIENT_ID || ""}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=channels:read,chat:write&user_scope=`;
+        return `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=channels:read,chat:write&user_scope=`;
       case "jira":
-        return `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${import.meta.env.VITE_JIRA_CLIENT_ID || ""}&scope=read:jira-work%20read:jira-user&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&prompt=consent`;
+        return `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${JIRA_CLIENT_ID}&scope=read:jira-work%20read:jira-user&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&prompt=consent`;
       default:
-        return "";
+        return null;
+    }
+  }, [isProviderConfigured]);
+
+  const fetchProviderData = useCallback(async (provider: "github" | "slack" | "jira") => {
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session) return { connected: false, data: [], error: "Not authenticated" };
+
+      const res = await fetch(
+        `https://iaucpiiptenjomzmseiv.supabase.co/functions/v1/integrations-data?action=data&provider=${provider}`,
+        {
+          headers: {
+            Authorization: `Bearer ${session.session.access_token}`,
+            apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhdWNwaWlwdGVuam9tem1zZWl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzODY5ODcsImV4cCI6MjA4NTk2Mjk4N30.nGqF1j2fnsLkFX_i3vC67RMCoWXIekwOfy4xw6PYfC8",
+          },
+        }
+      );
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        return { connected: false, data: [], error: errBody.error || `HTTP ${res.status}` };
+      }
+      return await res.json();
+    } catch (err) {
+      console.error(`Failed to fetch ${provider} data:`, err);
+      return { connected: false, data: [], error: "Erro de rede ao buscar dados" };
     }
   }, []);
 
-  const fetchProviderData = useCallback(async (provider: "github" | "slack" | "jira") => {
-    const { data: session } = await supabase.auth.getSession();
-    if (!session?.session) return { connected: false, data: [], error: "Not authenticated" };
-
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/integrations-data?action=data&provider=${provider}`, {
-      headers: {
-        Authorization: `Bearer ${session.session.access_token}`,
-        apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhdWNwaWlwdGVuam9tem1zZWl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzODY5ODcsImV4cCI6MjA4NTk2Mjk4N30.nGqF1j2fnsLkFX_i3vC67RMCoWXIekwOfy4xw6PYfC8",
-      },
-    });
-    return await res.json();
-  }, []);
-
-  return { status, loading, fetchStatus, getOAuthUrl, fetchProviderData };
+  return { status, loading, fetchStatus, getOAuthUrl, fetchProviderData, isProviderConfigured };
 }
