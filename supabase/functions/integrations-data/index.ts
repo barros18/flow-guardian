@@ -5,11 +5,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Helper function to safely get environment variables
+// Helper function to safely get environment variables without throwing too early
 const getEnv = (key: string) => {
   const value = Deno.env.get(key);
   if (!value) {
-    throw new Error(`Missing environment variable: ${key}`);
+    console.warn(`Warning: Missing environment variable: ${key}`);
   }
   return value;
 };
@@ -86,18 +86,33 @@ async function refreshJiraToken(refreshToken: string, userId: string) {
 }
 
 async function getGithubRepos(accessToken: string) {
+  if (!accessToken) throw new Error("GitHub access token is missing");
+
   try {
-    const res = await fetch("https://api.github.com/user/repos?sort=updated&per_page=30", {
-      headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": "DevSync" },
+    console.log("Fetching GitHub repos...");
+    const res = await fetch("https://api.github.com/user/repos?sort=updated&per_page=100&affiliation=owner,collaborator,organization_member", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "DevSync-FlowGuardian"
+      },
     });
+
     if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`GitHub API error [${res.status}]: ${body}`);
+      const errorText = await res.text();
+      let errorData;
+      try { errorData = JSON.parse(errorText); } catch { errorData = { message: errorText }; }
+
+      console.error(`GitHub API error [${res.status}]:`, errorData);
+      throw new Error(errorData.message || `GitHub error ${res.status}`);
     }
+
     const repos = await res.json();
     if (!Array.isArray(repos)) {
-      throw new Error("GitHub API returned unexpected format (not an array)");
+      console.error("GitHub returned non-array:", repos);
+      throw new Error("GitHub API returned an invalid format");
     }
+
     return repos.map((r: any) => ({
       name: r.name,
       full_name: r.full_name,
@@ -107,59 +122,79 @@ async function getGithubRepos(accessToken: string) {
       language: r.language,
       updated_at: r.updated_at,
     }));
-  } catch (error) {
-    console.error("Error fetching GitHub repos:", error);
-    throw error;
+  } catch (error: any) {
+    console.error("Error in getGithubRepos:", error);
+    throw new Error(`Falha ao carregar repositórios do GitHub: ${error.message}`);
   }
 }
 
 async function getSlackChannels(accessToken: string) {
+  if (!accessToken) throw new Error("Slack access token is missing");
+
   try {
+    console.log("Fetching Slack channels...");
     const res = await fetch(
       "https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=100",
       {
         headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
+
     const data = await res.json();
-    if (!data.ok) throw new Error(`Slack API error: ${data.error}`);
+    if (!data.ok) {
+      console.error("Slack API error:", data.error);
+      throw new Error(`Slack error: ${data.error}`);
+    }
+
     return data.channels.map((c: any) => ({
       id: c.id,
       name: c.name,
       is_private: c.is_private,
       num_members: c.num_members,
     }));
-  } catch (error) {
-    console.error("Error fetching Slack channels:", error);
-    throw error;
+  } catch (error: any) {
+    console.error("Error in getSlackChannels:", error);
+    throw new Error(`Falha ao carregar canais do Slack: ${error.message}`);
   }
 }
 
 async function getJiraProjects(accessToken: string, cloudId: string) {
+  if (!accessToken) throw new Error("Jira access token is missing");
+  if (!cloudId) throw new Error("Jira cloudId is missing");
+
   try {
+    console.log(`Fetching Jira projects for cloudId ${cloudId}...`);
     const res = await fetch(
       `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/project`,
       {
-        headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Accept": "application/json"
+        },
       }
     );
+
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Jira API error [${res.status}]: ${body}`);
+      console.error(`Jira API error [${res.status}]:`, body);
+      throw new Error(`Jira error ${res.status}`);
     }
+
     const projects = await res.json();
     if (!Array.isArray(projects)) {
-      throw new Error("Jira API returned unexpected format (not an array)");
+      console.error("Jira returned non-array:", projects);
+      throw new Error("Jira API returned an invalid format");
     }
+
     return projects.map((p: any) => ({
       key: p.key,
       name: p.name,
       projectTypeKey: p.projectTypeKey,
       avatarUrl: p.avatarUrls?.["48x48"],
     }));
-  } catch (error) {
-    console.error("Error fetching Jira projects:", error);
-    throw error;
+  } catch (error: any) {
+    console.error("Error in getJiraProjects:", error);
+    throw new Error(`Falha ao carregar projetos do Jira: ${error.message}`);
   }
 }
 
@@ -681,46 +716,58 @@ Deno.serve(async (req) => {
     // Allowed for all authenticated users (Developer, Tech Lead, Admin)
     // Developers need to read repositories/projects to link tasks.
     if (action === "data" && provider) {
-      const integration = await getIntegration(user.id, provider);
+      try {
+        const integration = await getIntegration(user.id, provider);
 
-      if (!integration) {
-        return new Response(
-          JSON.stringify({ error: `No ${provider} integration found`, connected: false }),
-          {
-            status: 404,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
-
-      let accessToken = integration.access_token;
-
-      // Check if token expired and refresh if possible
-      if (integration.expires_at && new Date(integration.expires_at) < new Date()) {
-        if (integration.refresh_token && provider === "jira") {
-          console.log("Refreshing expired Jira token");
-          try {
-            accessToken = await refreshJiraToken(integration.refresh_token, user.id);
-          } catch (refreshError) {
-            console.error("Failed to refresh token:", refreshError);
-            return new Response(JSON.stringify({ error: "Token expired and refresh failed. Please reconnect.", connected: false }), {
-              status: 401,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
-        } else {
+        if (!integration || !integration.access_token) {
+          console.warn(`No active ${provider} integration for user ${user.id}`);
           return new Response(
-            JSON.stringify({ error: "Token expired, please reconnect", connected: false }),
+            JSON.stringify({
+              error: `Sua conta ${provider} não está conectada ou o acesso expirou.`,
+              connected: false
+            }),
             {
-              status: 401,
+              status: 404, // Use 404 or 200 with connected:false depending on frontend expectation
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             }
           );
         }
-      }
 
-      let data: any;
-      try {
+        let accessToken = integration.access_token;
+
+        // Check if token expired and refresh if possible
+        if (integration.expires_at && new Date(integration.expires_at) < new Date()) {
+          console.log(`Token for ${provider} expired at ${integration.expires_at}`);
+
+          if (integration.refresh_token && provider === "jira") {
+            console.log("Refreshing expired Jira token...");
+            try {
+              accessToken = await refreshJiraToken(integration.refresh_token, user.id);
+            } catch (refreshError: any) {
+              console.error("Failed to refresh Jira token:", refreshError);
+              return new Response(JSON.stringify({
+                error: "Sua sessão do Jira expirou e não pôde ser renovada. Por favor, reconecte.",
+                connected: false
+              }), {
+                status: 401,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+          } else {
+            return new Response(
+              JSON.stringify({
+                error: `Sua conexão com ${provider} expirou. Por favor, conecte novamente.`,
+                connected: false
+              }),
+              {
+                status: 401,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              }
+            );
+          }
+        }
+
+        let data: any;
         switch (provider) {
           case "github":
             data = await getGithubRepos(accessToken);
@@ -730,39 +777,41 @@ Deno.serve(async (req) => {
             break;
           case "jira":
             if (!integration.external_account_id) {
-              return new Response(JSON.stringify({ error: "Jira cloudId not found in integration record", connected: false }), {
-                status: 400,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-              });
+              throw new Error("ID da conta Jira não encontrado. Por favor, reconecte.");
             }
             data = await getJiraProjects(accessToken, integration.external_account_id);
             break;
           default:
-            return new Response(JSON.stringify({ error: `Unknown provider: ${provider}` }), {
+            return new Response(JSON.stringify({ error: `Provedor desconhecido: ${provider}` }), {
               status: 400,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
         }
+
+        return new Response(JSON.stringify({ data, connected: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+
       } catch (providerError: any) {
-        return new Response(JSON.stringify({ error: `Provider error: ${providerError.message || providerError}` }), {
+        console.error(`Data action error for ${provider}:`, providerError);
+        return new Response(JSON.stringify({
+          error: providerError.message || "Erro inesperado ao buscar dados.",
+          connected: true // Still connected, but failed to fetch data
+        }), {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-
-      return new Response(JSON.stringify({ data, connected: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
     }
 
-    return new Response(JSON.stringify({ error: "Invalid action or missing parameters" }), {
+    return new Response(JSON.stringify({ error: "Ação inválida ou parâmetros ausentes" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
   } catch (error: any) {
-    console.error("Unhandled Global Error:", error);
-    const message = error instanceof Error ? error.message : "Internal Server Error";
+    console.error("Global Handler Error:", error);
+    const message = error instanceof Error ? error.message : "Erro interno no servidor";
 
     return new Response(JSON.stringify({ error: message }), {
       status: 500,

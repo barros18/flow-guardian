@@ -17,6 +17,7 @@ interface OAuthTokenResponse {
 }
 
 async function exchangeGithubCode(code: string): Promise<{ token: OAuthTokenResponse; externalId: string; scopes: string }> {
+  console.log('GitHub: Exchanging code for token...');
   const res = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -27,13 +28,20 @@ async function exchangeGithubCode(code: string): Promise<{ token: OAuthTokenResp
     }),
   })
   const data = await res.json()
+  console.log('GitHub token response:', JSON.stringify(data));
+
   if (data.error) throw new Error(`GitHub OAuth error: ${data.error_description || data.error}`)
+  if (!data.access_token) throw new Error('GitHub returned no access token')
 
   // Get user info
+  console.log('GitHub: Fetching user info...');
   const userRes = await fetch('https://api.github.com/user', {
     headers: { Authorization: `Bearer ${data.access_token}`, 'User-Agent': 'DevSync' },
   })
   const user = await userRes.json()
+  console.log('GitHub user info:', JSON.stringify(user));
+
+  if (!user.id) throw new Error('Failed to get GitHub user ID')
 
   return {
     token: { access_token: data.access_token, scope: data.scope },
@@ -43,6 +51,7 @@ async function exchangeGithubCode(code: string): Promise<{ token: OAuthTokenResp
 }
 
 async function exchangeSlackCode(code: string, redirectUri: string): Promise<{ token: OAuthTokenResponse; externalId: string; scopes: string }> {
+  console.log('Slack: Exchanging code for token...');
   const params = new URLSearchParams({
     client_id: Deno.env.get('SLACK_CLIENT_ID')!,
     client_secret: Deno.env.get('SLACK_CLIENT_SECRET')!,
@@ -55,16 +64,18 @@ async function exchangeSlackCode(code: string, redirectUri: string): Promise<{ t
     body: params.toString(),
   })
   const data = await res.json()
+  console.log('Slack token response:', JSON.stringify(data));
   if (!data.ok) throw new Error(`Slack OAuth error: ${data.error}`)
 
   return {
     token: { access_token: data.access_token, refresh_token: data.refresh_token },
-    externalId: data.team?.id || '',
+    externalId: data.team?.id || data.enterprise?.id || '',
     scopes: data.scope || '',
   }
 }
 
 async function exchangeJiraCode(code: string, redirectUri: string): Promise<{ token: OAuthTokenResponse; externalId: string; scopes: string }> {
+  console.log('Jira: Exchanging code for token...');
   const res = await fetch('https://auth.atlassian.com/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -77,13 +88,16 @@ async function exchangeJiraCode(code: string, redirectUri: string): Promise<{ to
     }),
   })
   const data = await res.json()
+  console.log('Jira token response:', JSON.stringify(data));
   if (data.error) throw new Error(`Jira OAuth error: ${data.error_description || data.error}`)
 
   // Get accessible resources (cloudId)
+  console.log('Jira: Fetching accessible resources...');
   const resourcesRes = await fetch('https://api.atlassian.com/oauth/token/accessible-resources', {
     headers: { Authorization: `Bearer ${data.access_token}` },
   })
   const resources = await resourcesRes.json()
+  console.log('Jira resources:', JSON.stringify(resources));
   const cloudId = resources[0]?.id || ''
 
   return {
