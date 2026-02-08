@@ -62,23 +62,32 @@ export default function UsersPage() {
     if (!currentUser?.organization_id) return;
     setLoading(true);
     try {
-      const { data: profiles, error: pError } = await supabase
-        .from("profiles")
-        .select("*")
+      // Fetch members from organization_members joined with profiles
+      const { data: membersData, error: mError } = await supabase
+        .from("organization_members")
+        .select(`
+          user_id,
+          role,
+          profiles:user_id (
+            id,
+            name,
+            email,
+            avatar,
+            organization_id
+          )
+        `)
         .eq("organization_id", currentUser.organization_id);
-      if (pError) throw pError;
 
-      const { data: roles, error: rError } = await supabase.from("user_roles").select("*");
-      if (rError) throw rError;
+      if (mError) throw mError;
 
-      const mappedUsers = profiles.map(p => ({
-        id: p.id,
-        user_id: p.user_id,
-        organization_id: p.organization_id,
-        name: p.name,
-        email: p.email,
-        avatar: p.avatar,
-        role: (roles.find(r => r.user_id === p.user_id)?.role || "developer") as UserRole
+      const mappedUsers: ProfileWithRole[] = (membersData as any[]).map(m => ({
+        id: m.profiles.id,
+        user_id: m.user_id,
+        organization_id: m.profiles.organization_id,
+        name: m.profiles.name,
+        email: m.profiles.email,
+        avatar: m.profiles.avatar,
+        role: m.role as UserRole
       }));
 
       setUsers(mappedUsers);
@@ -124,12 +133,56 @@ export default function UsersPage() {
     }
   };
 
-  const handleInvite = () => {
-    if (!inviteEmail) return;
-    addLog("Convite enviado", inviteEmail);
-    toast.success(`Convite enviado para ${inviteEmail}`);
-    setInviteEmail("");
-    setOpen(false);
+  const handleInvite = async () => {
+    if (!inviteEmail || !currentUser?.organization_id) return;
+
+    try {
+      // Find user by email
+      const { data: targetProfile, error: pError } = await supabase
+        .from("profiles")
+        .select("user_id, name")
+        .eq("email", inviteEmail)
+        .maybeSingle();
+
+      if (pError) throw pError;
+      if (!targetProfile) {
+        toast.error("Usuário não encontrado. Peça para ele criar uma conta primeiro.");
+        return;
+      }
+
+      // Add to organization_members
+      const { error: mError } = await supabase
+        .from("organization_members")
+        .insert({
+          user_id: targetProfile.user_id,
+          organization_id: currentUser.organization_id,
+          role: "developer"
+        });
+
+      if (mError) {
+        if (mError.code === "23505") { // Unique constraint violation
+          toast.error("Usuário já faz parte desta organização.");
+        } else {
+          throw mError;
+        }
+        return;
+      }
+
+      // Update target user's profile with organization_id
+      await supabase
+        .from("profiles")
+        .update({ organization_id: currentUser.organization_id })
+        .eq("user_id", targetProfile.user_id);
+
+      addLog("Usuário adicionado", targetProfile.name);
+      toast.success(`${targetProfile.name} adicionado com sucesso!`);
+      setInviteEmail("");
+      setOpen(false);
+      fetchUsers();
+    } catch (error: any) {
+      console.error("Error inviting user:", error);
+      toast.error("Erro ao adicionar usuário");
+    }
   };
 
   const confirmRemove = () => {

@@ -117,7 +117,6 @@ export type Database = {
           email: string
           id: string
           name: string
-          name: string
           updated_at: string
           user_id: string
           organization_id: string | null
