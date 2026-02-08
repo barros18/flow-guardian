@@ -23,6 +23,10 @@ export default function PRDetailPage() {
 
   const isReadyForMerge = pr.approvals > 0 && !pr.changesRequested && pr.buildStatus === "success";
 
+  // Build real external URLs from mock data
+  const githubUrl = `https://github.com/${pr.repository}/pull/${pr.number}`;
+  const jiraUrl = pr.jiraTask ? `https://jira.atlassian.com/browse/${pr.jiraTask.key}` : null;
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
       <Link to="/dashboard" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6">
@@ -56,19 +60,22 @@ export default function PRDetailPage() {
           </div>
         </div>
         <div className="flex gap-2 flex-shrink-0">
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <ExternalLink className="h-3.5 w-3.5" /> GitHub
+          <Button variant="outline" size="sm" className="gap-1.5" asChild>
+            <a href={githubUrl} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="h-3.5 w-3.5" /> GitHub
+            </a>
           </Button>
-          {pr.jiraTask && (
-            <Button variant="outline" size="sm" className="gap-1.5">
-              <ExternalLink className="h-3.5 w-3.5" /> Jira
+          {jiraUrl && (
+            <Button variant="outline" size="sm" className="gap-1.5" asChild>
+              <a href={jiraUrl} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-3.5 w-3.5" /> Jira
+              </a>
             </Button>
           )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Info */}
         <div className="lg:col-span-1 space-y-6">
           <div className="rounded-xl border border-border bg-card p-5 space-y-4">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Detalhes</h3>
@@ -86,7 +93,13 @@ export default function PRDetailPage() {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Tarefa</span>
-                <span className="font-mono text-primary text-xs">{pr.jiraTask?.key || "—"}</span>
+                {pr.jiraTask ? (
+                  <a href={`https://jira.atlassian.com/browse/${pr.jiraTask.key}`} target="_blank" rel="noopener noreferrer" className="font-mono text-primary text-xs hover:underline">
+                    {pr.jiraTask.key}
+                  </a>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Aberto há</span>
@@ -118,7 +131,6 @@ export default function PRDetailPage() {
           )}
         </div>
 
-        {/* Timeline */}
         <div className="lg:col-span-2">
           <div className="rounded-xl border border-border bg-card p-6">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-6">Linha do tempo</h3>
