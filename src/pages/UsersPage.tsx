@@ -1,8 +1,45 @@
+import { useState, useEffect } from "react";
+import { UserRole } from "@/data/types";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { UserPlus, Trash2, Shield, Code, Eye, Clock } from "lucide-react";
+import { motion } from "framer-motion";
+import { toast } from "sonner";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  avatar: string;
+}
+
 interface ProfileWithRole extends User {
   user_id: string;
+}
+
+interface AuditLog {
+  id: string;
+  action: string;
+  user: string;
+  target: string;
+  timestamp: Date;
 }
 
 const roleConfig: Record<UserRole, { label: string; icon: React.ElementType; color: string }> = {
