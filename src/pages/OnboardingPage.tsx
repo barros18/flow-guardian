@@ -230,19 +230,38 @@ export default function OnboardingPage() {
                 if (members.length > 0 && profile?.organization_id) {
                   setIsCreating(true);
                   try {
-                    const memberInserts = members.map(m => ({
-                      email: m.email, // Note: We might need a logic to handle invited emails since they don't have user_id yet
-                      organization_id: profile.organization_id,
-                      role: m.role
-                    }));
+                    for (const member of members) {
+                      // Find user by email
+                      const { data: targetProfile } = await supabase
+                        .from("profiles")
+                        .select("user_id")
+                        .eq("email", member.email)
+                        .maybeSingle();
 
-                    // Since organization_members requires user_id (FK to auth.users), 
-                    // we ideally need an 'invitations' table or handle this differently.
-                    // For now, let's assume we are adding existing users or just keeping it in state.
-                    // To follow the user's request strictly about "adding users", 
-                    // I will just advance the step if we don't have an invitations system yet.
+                      if (targetProfile) {
+                        // Add to organization_members
+                        await supabase
+                          .from("organization_members")
+                          .insert({
+                            user_id: targetProfile.user_id,
+                            organization_id: profile.organization_id,
+                            role: member.role as any
+                          });
 
+                        // Update target user's profile
+                        await supabase
+                          .from("profiles")
+                          .update({ organization_id: profile.organization_id })
+                          .eq("user_id", targetProfile.user_id);
+                      }
+                    }
+
+                    toast.success("Membros processados!");
                     setStep(3);
+                  } catch (err) {
+                    console.error("Error inviting members:", err);
+                    toast.error("Alguns membros não puderam ser adicionados.");
+                    setStep(3); // Continue anyway
                   } finally {
                     setIsCreating(false);
                   }
