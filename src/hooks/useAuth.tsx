@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, profile, role, signIn, signUp, signOut, refreshProfile: () => user && fetchProfileAndRole(user.id) }}>
+    <AuthContext.Provider value={{ user, session, loading, profile, role, signIn, signUp, signOut, refreshProfile: async () => { if (user) await fetchProfileAndRole(user.id); } }}>
       {children}
     </AuthContext.Provider>
   );

@@ -2,7 +2,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, profile } = useAuth();
 
   if (loading) {
     return (
@@ -17,8 +17,6 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   // If user has no organization and is not already on onboarding, redirect there
-  // This is a safety measure for manual registrations or migration edge cases
-  const { profile } = useAuth();
   const isExcludedPath = window.location.pathname === "/onboarding";
 
   if (profile && !profile.organization_id && !isExcludedPath) {

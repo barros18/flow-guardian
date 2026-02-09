@@ -14,6 +14,197 @@ export type Database = {
   }
   public: {
     Tables: {
+      alert_rules: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          id: string
+          organization_id: string
+          threshold_hours: number
+          type: Database["public"]["Enums"]["alert_type"]
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          organization_id: string
+          threshold_hours?: number
+          type: Database["public"]["Enums"]["alert_type"]
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          organization_id?: string
+          threshold_hours?: number
+          type?: Database["public"]["Enums"]["alert_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_rules_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      alerts: {
+        Row: {
+          created_at: string
+          id: string
+          last_notified_at: string | null
+          organization_id: string
+          pull_request_id: string
+          resolved_at: string | null
+          severity: Database["public"]["Enums"]["alert_severity"]
+          status: Database["public"]["Enums"]["alert_status"]
+          type: Database["public"]["Enums"]["alert_type"]
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_notified_at?: string | null
+          organization_id: string
+          pull_request_id: string
+          resolved_at?: string | null
+          severity?: Database["public"]["Enums"]["alert_severity"]
+          status?: Database["public"]["Enums"]["alert_status"]
+          type: Database["public"]["Enums"]["alert_type"]
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_notified_at?: string | null
+          organization_id?: string
+          pull_request_id?: string
+          resolved_at?: string | null
+          severity?: Database["public"]["Enums"]["alert_severity"]
+          status?: Database["public"]["Enums"]["alert_status"]
+          type?: Database["public"]["Enums"]["alert_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alerts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alerts_pull_request_id_fkey"
+            columns: ["pull_request_id"]
+            isOneToOne: false
+            referencedRelation: "pull_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          ip_address: string | null
+          organization_id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          organization_id: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          organization_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      builds: {
+        Row: {
+          commit_sha: string
+          created_at: string
+          finished_at: string | null
+          id: string
+          pull_request_id: string
+          started_at: string
+          status: Database["public"]["Enums"]["build_status"]
+        }
+        Insert: {
+          commit_sha: string
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          pull_request_id: string
+          started_at?: string
+          status?: Database["public"]["Enums"]["build_status"]
+        }
+        Update: {
+          commit_sha?: string
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          pull_request_id?: string
+          started_at?: string
+          status?: Database["public"]["Enums"]["build_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "builds_pull_request_id_fkey"
+            columns: ["pull_request_id"]
+            isOneToOne: false
+            referencedRelation: "pull_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      integration_installations: {
+        Row: {
+          created_at: string
+          external_installation_id: string
+          id: string
+          integration_id: string
+          metadata: Json | null
+        }
+        Insert: {
+          created_at?: string
+          external_installation_id: string
+          id?: string
+          integration_id: string
+          metadata?: Json | null
+        }
+        Update: {
+          created_at?: string
+          external_installation_id?: string
+          id?: string
+          integration_id?: string
+          metadata?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_installations_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "integrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integrations: {
         Row: {
           access_token: string
@@ -21,9 +212,12 @@ export type Database = {
           expires_at: string | null
           external_account_id: string | null
           id: string
+          organization_id: string | null
           provider: string
           refresh_token: string | null
           scopes: string | null
+          status: Database["public"]["Enums"]["integration_status"]
+          type: Database["public"]["Enums"]["integration_type"] | null
           updated_at: string
           user_id: string
         }
@@ -33,9 +227,12 @@ export type Database = {
           expires_at?: string | null
           external_account_id?: string | null
           id?: string
+          organization_id?: string | null
           provider: string
           refresh_token?: string | null
           scopes?: string | null
+          status?: Database["public"]["Enums"]["integration_status"]
+          type?: Database["public"]["Enums"]["integration_type"] | null
           updated_at?: string
           user_id: string
         }
@@ -45,13 +242,173 @@ export type Database = {
           expires_at?: string | null
           external_account_id?: string | null
           id?: string
+          organization_id?: string | null
           provider?: string
           refresh_token?: string | null
           scopes?: string | null
+          status?: Database["public"]["Enums"]["integration_status"]
+          type?: Database["public"]["Enums"]["integration_type"] | null
           updated_at?: string
           user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "integrations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jira_projects: {
+        Row: {
+          created_at: string
+          id: string
+          jira_project_key: string
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          jira_project_key: string
+          name: string
+          organization_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          jira_project_key?: string
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jira_projects_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications_log: {
+        Row: {
+          alert_id: string
+          channel: string
+          id: string
+          sent_at: string
+          status: Database["public"]["Enums"]["notification_status"]
+        }
+        Insert: {
+          alert_id: string
+          channel?: string
+          id?: string
+          sent_at?: string
+          status?: Database["public"]["Enums"]["notification_status"]
+        }
+        Update: {
+          alert_id?: string
+          channel?: string
+          id?: string
+          sent_at?: string
+          status?: Database["public"]["Enums"]["notification_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_log_alert_id_fkey"
+            columns: ["alert_id"]
+            isOneToOne: false
+            referencedRelation: "alerts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      oauth_states: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          organization_id: string
+          provider: string
+          state_token: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          organization_id: string
+          provider: string
+          state_token: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          organization_id?: string
+          provider?: string
+          state_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oauth_states_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          timezone: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          timezone?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          timezone?: string
+        }
         Relationships: []
+      }
+      pr_events: {
+        Row: {
+          created_at: string
+          id: string
+          pull_request_id: string
+          type: Database["public"]["Enums"]["pr_event_type"]
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          pull_request_id: string
+          type: Database["public"]["Enums"]["pr_event_type"]
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          pull_request_id?: string
+          type?: Database["public"]["Enums"]["pr_event_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pr_events_pull_request_id_fkey"
+            columns: ["pull_request_id"]
+            isOneToOne: false
+            referencedRelation: "pull_requests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -60,6 +417,7 @@ export type Database = {
           email: string
           id: string
           name: string
+          organization_id: string | null
           updated_at: string
           user_id: string
         }
@@ -69,6 +427,7 @@ export type Database = {
           email: string
           id?: string
           name: string
+          organization_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -78,7 +437,226 @@ export type Database = {
           email?: string
           id?: string
           name?: string
+          organization_id?: string | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pull_requests: {
+        Row: {
+          approvals_count: number
+          author_id: string | null
+          closed_at: string | null
+          created_at: string
+          github_pr_id: string
+          id: string
+          is_blocked: boolean
+          jira_issue_key: string | null
+          last_activity_at: string
+          last_notified_at: string | null
+          merged_at: string | null
+          organization_id: string
+          ready_for_merge: boolean
+          repository_id: string
+          status: Database["public"]["Enums"]["pr_status"]
+          title: string
+        }
+        Insert: {
+          approvals_count?: number
+          author_id?: string | null
+          closed_at?: string | null
+          created_at?: string
+          github_pr_id: string
+          id?: string
+          is_blocked?: boolean
+          jira_issue_key?: string | null
+          last_activity_at?: string
+          last_notified_at?: string | null
+          merged_at?: string | null
+          organization_id: string
+          ready_for_merge?: boolean
+          repository_id: string
+          status?: Database["public"]["Enums"]["pr_status"]
+          title: string
+        }
+        Update: {
+          approvals_count?: number
+          author_id?: string | null
+          closed_at?: string | null
+          created_at?: string
+          github_pr_id?: string
+          id?: string
+          is_blocked?: boolean
+          jira_issue_key?: string | null
+          last_activity_at?: string
+          last_notified_at?: string | null
+          merged_at?: string | null
+          organization_id?: string
+          ready_for_merge?: boolean
+          repository_id?: string
+          status?: Database["public"]["Enums"]["pr_status"]
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pull_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pull_requests_repository_id_fkey"
+            columns: ["repository_id"]
+            isOneToOne: false
+            referencedRelation: "repositories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      repositories: {
+        Row: {
+          active: boolean
+          created_at: string
+          github_repo_id: string
+          id: string
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          github_repo_id: string
+          id?: string
+          name: string
+          organization_id: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          github_repo_id?: string
+          id?: string
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repositories_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      slack_channels: {
+        Row: {
+          channel_id: string
+          channel_name: string
+          created_at: string
+          id: string
+          integration_id: string
+          is_default: boolean
+        }
+        Insert: {
+          channel_id: string
+          channel_name: string
+          created_at?: string
+          id?: string
+          integration_id: string
+          is_default?: boolean
+        }
+        Update: {
+          channel_id?: string
+          channel_name?: string
+          created_at?: string
+          id?: string
+          integration_id?: string
+          is_default?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slack_channels_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "integrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_invitations: {
+        Row: {
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string
+          organization_id: string
+          role: Database["public"]["Enums"]["app_role"]
+          status: Database["public"]["Enums"]["invitation_status"]
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          expires_at: string
+          id?: string
+          invited_by: string
+          organization_id: string
+          role?: Database["public"]["Enums"]["app_role"]
+          status?: Database["public"]["Enums"]["invitation_status"]
+          token: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string
+          organization_id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          status?: Database["public"]["Enums"]["invitation_status"]
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_invitations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_notification_preferences: {
+        Row: {
+          created_at: string
+          notify_build_failed: boolean
+          notify_pr_inactive: boolean
+          notify_pr_no_task: boolean
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          notify_build_failed?: boolean
+          notify_pr_inactive?: boolean
+          notify_pr_no_task?: boolean
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          notify_build_failed?: boolean
+          notify_pr_inactive?: boolean
+          notify_pr_no_task?: boolean
           user_id?: string
         }
         Relationships: []
@@ -113,9 +691,31 @@ export type Database = {
         }
         Returns: boolean
       }
+      user_org_id: { Args: { _user_id: string }; Returns: string }
     }
     Enums: {
+      alert_severity: "NORMAL" | "CRITICAL"
+      alert_status: "OPEN" | "RESOLVED"
+      alert_type:
+        | "PR_INACTIVE"
+        | "PR_APPROVED_NO_MERGE"
+        | "BUILD_FAILED"
+        | "NO_JIRA_TASK"
       app_role: "admin" | "lead" | "developer"
+      build_status: "SUCCESS" | "FAILED" | "RUNNING"
+      integration_status: "CONNECTED" | "ERROR"
+      integration_type: "GITHUB" | "JIRA" | "SLACK"
+      invitation_status: "PENDING" | "ACCEPTED" | "EXPIRED"
+      notification_status: "SENT" | "FAILED"
+      pr_event_type:
+        | "OPENED"
+        | "COMMIT"
+        | "REVIEW"
+        | "APPROVED"
+        | "BUILD_SUCCESS"
+        | "BUILD_FAILED"
+        | "MERGED"
+      pr_status: "OPEN" | "MERGED" | "CLOSED"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -243,7 +843,30 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      alert_severity: ["NORMAL", "CRITICAL"],
+      alert_status: ["OPEN", "RESOLVED"],
+      alert_type: [
+        "PR_INACTIVE",
+        "PR_APPROVED_NO_MERGE",
+        "BUILD_FAILED",
+        "NO_JIRA_TASK",
+      ],
       app_role: ["admin", "lead", "developer"],
+      build_status: ["SUCCESS", "FAILED", "RUNNING"],
+      integration_status: ["CONNECTED", "ERROR"],
+      integration_type: ["GITHUB", "JIRA", "SLACK"],
+      invitation_status: ["PENDING", "ACCEPTED", "EXPIRED"],
+      notification_status: ["SENT", "FAILED"],
+      pr_event_type: [
+        "OPENED",
+        "COMMIT",
+        "REVIEW",
+        "APPROVED",
+        "BUILD_SUCCESS",
+        "BUILD_FAILED",
+        "MERGED",
+      ],
+      pr_status: ["OPEN", "MERGED", "CLOSED"],
     },
   },
 } as const
