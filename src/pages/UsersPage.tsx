@@ -45,7 +45,7 @@ const roleConfig: Record<UserRole, { label: string; icon: React.ElementType; col
 };
 
 export default function UsersPage() {
-  const { profile: currentUser } = useAuth();
+  const { profile: currentUser, role: currentRole } = useAuth();
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -105,19 +105,33 @@ export default function UsersPage() {
   };
 
   const handleRoleChange = async (targetUserId: string, role: UserRole) => {
+    if (currentRole !== "admin") {
+      toast.error("Apenas administradores podem alterar papéis.");
+      return;
+    }
     try {
-      const { error } = await supabase
-        .from("user_roles")
-        .upsert({ user_id: targetUserId, role }, { onConflict: "user_id" });
+      const response = await fetch(
+        `https://iaucpiiptenjomzmseiv.supabase.co/functions/v1/integrations-data?action=update_role`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhdWNwaWlwdGVuam9tem1zZWl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzODY5ODcsImV4cCI6MjA4NTk2Mjk4N30.nGqF1j2fnsLkFX_i3vC67RMCoWXIekwOfy4xw6PYfC8",
+          },
+          body: JSON.stringify({ targetUserId, newRole: role }),
+        }
+      );
 
-      if (error) throw error;
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to update role");
 
       const user = users.find((u) => u.user_id === targetUserId);
       setUsers((prev) => prev.map((u) => (u.user_id === targetUserId ? { ...u, role } : u)));
       addLog(`Papel alterado para ${roleConfig[role].label}`, user?.name || "");
       toast.success("Papel atualizado!");
     } catch (error: any) {
-      toast.error("Erro ao atualizar papel: " + error.message);
+      toast.error("Erro ao atualizar papel: " + (error.message || "Erro desconhecido"));
     }
   };
 
