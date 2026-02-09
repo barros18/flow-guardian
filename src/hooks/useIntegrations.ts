@@ -19,13 +19,6 @@ export function useIntegrations() {
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke("integrations-data", {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-        body: null,
-      });
-
-      // Use direct fetch with query params since edge function uses URL params
       const res = await fetch(
         `https://iaucpiiptenjomzmseiv.supabase.co/functions/v1/integrations-data?action=status`,
         {
@@ -35,10 +28,11 @@ export function useIntegrations() {
           },
         }
       );
-      if (!res.ok) throw new Error(`Status fetch failed: ${res.status}`);
-      const result = await res.json();
-      if (result.status) {
-        setStatus(result.status);
+      if (res.ok) {
+        const result = await res.json();
+        if (result.status) {
+          setStatus(result.status);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch integration status:", err);

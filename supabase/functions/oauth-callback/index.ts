@@ -284,12 +284,11 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Verify user is admin
-    const { data: roleData } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .single();
+    // Verify user is admin and get their org
+    const [{ data: roleData }, { data: profileData }] = await Promise.all([
+      supabase.from("user_roles").select("role").eq("user_id", userId).single(),
+      supabase.from("profiles").select("organization_id").eq("user_id", userId).single(),
+    ]);
 
     if (roleData?.role !== "admin") {
       return new Response(
@@ -301,6 +300,8 @@ Deno.serve(async (req) => {
       );
     }
 
+    const orgId = profileData?.organization_id;
+
     const expiresAt = tokenData.token.expires_in
       ? new Date(
           Date.now() + tokenData.token.expires_in * 1000
@@ -310,12 +311,15 @@ Deno.serve(async (req) => {
     const { error: dbError } = await supabase.from("integrations").upsert(
       {
         user_id: userId,
+        organization_id: orgId,
         provider,
         access_token: tokenData.token.access_token,
         refresh_token: tokenData.token.refresh_token || null,
         expires_at: expiresAt,
         external_account_id: tokenData.externalId,
         scopes: tokenData.scopes,
+        status: "CONNECTED",
+        type: provider.toUpperCase(),
       },
       { onConflict: "user_id,provider" }
     );

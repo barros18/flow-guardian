@@ -14,17 +14,24 @@ const getEnv = (key: string) => {
   return value;
 };
 
-async function getIntegration(userId: string, provider: string) {
+async function getIntegration(orgId: string | null, userId: string, provider: string) {
   const supabaseUrl = getEnv("SUPABASE_URL");
   const supabaseServiceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
   const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("integrations")
     .select("*")
-    .eq("user_id", userId)
-    .eq("provider", provider)
-    .maybeSingle();
+    .eq("provider", provider);
+
+  // Prefer org-scoped query, fall back to user-scoped
+  if (orgId) {
+    query = query.eq("organization_id", orgId);
+  } else {
+    query = query.eq("user_id", userId);
+  }
+
+  const { data, error } = await query.maybeSingle();
 
   if (error) {
     console.error(`Error fetching integration for ${provider}:`, error);
@@ -33,7 +40,7 @@ async function getIntegration(userId: string, provider: string) {
   return data;
 }
 
-async function refreshJiraToken(refreshToken: string, userId: string) {
+async function refreshJiraToken(refreshToken: string, orgId: string | null, userId: string) {
   try {
     const clientId = getEnv("JIRA_CLIENT_ID");
     const clientSecret = getEnv("JIRA_CLIENT_SECRET");
@@ -60,15 +67,22 @@ async function refreshJiraToken(refreshToken: string, userId: string) {
     const supabaseServiceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
-    const { error: updateError } = await supabase
+    let updateQuery = supabase
       .from("integrations")
       .update({
         access_token: data.access_token,
         refresh_token: data.refresh_token || refreshToken,
         expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
       })
-      .eq("user_id", userId)
       .eq("provider", "jira");
+
+    if (orgId) {
+      updateQuery = updateQuery.eq("organization_id", orgId);
+    } else {
+      updateQuery = updateQuery.eq("user_id", userId);
+    }
+
+    const { error: updateError } = await updateQuery;
 
     if (updateError) {
       console.error("Failed to update Jira token in DB:", updateError);
@@ -253,6 +267,15 @@ Deno.serve(async (req) => {
     const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
     const userRole = await getUserRole(user.id, adminSupabase);
 
+    // Get user's organization_id from profile
+    const { data: profile } = await adminSupabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("user_id", user.id)
+      .single();
+
+    const orgId = profile?.organization_id || null;
+
     const url = new URL(req.url);
     const action = url.searchParams.get("action");
     const provider = url.searchParams.get("provider");
@@ -269,10 +292,17 @@ Deno.serve(async (req) => {
       }
 
       try {
-        const { data: integrations, error: dbError } = await adminSupabase
+        let statusQuery = adminSupabase
           .from("integrations")
-          .select("provider, external_account_id, scopes, created_at, user_id")
-          .eq("user_id", user.id); // Explicitly filter by the authenticated user ID
+          .select("provider, external_account_id, scopes, created_at, user_id");
+
+        if (orgId) {
+          statusQuery = statusQuery.eq("organization_id", orgId);
+        } else {
+          statusQuery = statusQuery.eq("user_id", user.id);
+        }
+
+        const { data: integrations, error: dbError } = await statusQuery;
 
         if (dbError) {
           console.error("Database error fetching integrations status:", dbError);
@@ -713,7 +743,7 @@ Deno.serve(async (req) => {
     // Developers need to read repositories/projects to link tasks.
     if (action === "data" && provider) {
       try {
-        const integration = await getIntegration(user.id, provider);
+        const integration = await getIntegration(orgId, user.id, provider);
 
         if (!integration || !integration.access_token) {
           console.warn(`No active ${provider} integration for user ${user.id}`);
@@ -738,7 +768,7 @@ Deno.serve(async (req) => {
           if (integration.refresh_token && provider === "jira") {
             console.log("Refreshing expired Jira token...");
             try {
-              accessToken = await refreshJiraToken(integration.refresh_token, user.id);
+              accessToken = await refreshJiraToken(integration.refresh_token, orgId, user.id);
             } catch (refreshError: any) {
               console.error("Failed to refresh Jira token:", refreshError);
               return new Response(JSON.stringify({
