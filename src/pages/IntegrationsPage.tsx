@@ -1,5 +1,19 @@
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { useIntegrations } from "@/hooks/useIntegrations";
+import { Button } from "@/components/ui/button";
+import {
+  Check,
+  ExternalLink,
+  AlertCircle,
+  Github,
+  Loader2,
+  Lock,
+  Globe,
+  MessageSquare,
+  FolderKanban,
+} from "lucide-react";
 
 interface GithubRepo {
   name: string;
@@ -26,8 +40,8 @@ interface JiraProject {
 }
 
 export default function IntegrationsPage() {
-  const { user, role } = useAuth();
-  const { status, loading, getOAuthUrl, fetchProviderData, fetchStatus, isProviderConfigured } = useIntegrations();
+  const { role } = useAuth();
+  const { status, loading, initiateOAuth, fetchProviderData, fetchStatus } = useIntegrations();
   const isAdmin = role === "admin";
   const [githubRepos, setGithubRepos] = useState<GithubRepo[]>([]);
   const [slackChannels, setSlackChannels] = useState<SlackChannel[]>([]);
@@ -39,22 +53,15 @@ export default function IntegrationsPage() {
       toast.error("Apenas administradores podem conectar novas integrações.");
       return;
     }
-    if (!isProviderConfigured(provider)) {
-      toast.warning(`Integração com ${provider} não está configurada. Verifique os Client IDs.`);
-      return;
-    }
     try {
-      const userId = user?.id || "demo-user";
-      const url = getOAuthUrl(provider, userId);
+      const url = await initiateOAuth(provider);
       if (url) {
         window.open(url, "_blank", "noopener,noreferrer");
         toast.info(`Autorize o ${provider} na nova aba aberta.`);
-      } else {
-        toast.warning(`Não foi possível gerar URL para ${provider}.`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(`OAuth error for ${provider}:`, err);
-      toast.error(`Erro ao iniciar conexão com ${provider}.`);
+      toast.error(err.message || `Erro ao iniciar conexão com ${provider}.`);
     }
   };
 
@@ -83,7 +90,7 @@ export default function IntegrationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  const ConnectOrStatus = ({ provider, configured }: { provider: "github" | "slack" | "jira"; configured: boolean }) => {
+  const ConnectOrStatus = ({ provider }: { provider: "github" | "slack" | "jira" }) => {
     if (status[provider]) {
       return (
         <span className="flex items-center gap-1 text-xs font-medium text-success bg-success/10 px-2.5 py-1 rounded-full">
@@ -92,22 +99,15 @@ export default function IntegrationsPage() {
       );
     }
     return (
-      <div className="flex flex-col items-end gap-1">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => handleConnect(provider)}
-          className="gap-1.5"
-          disabled={!configured || !isAdmin}
-        >
-          {isAdmin ? "Conectar" : "Somente Admin"} <ExternalLink className="h-3 w-3" />
-        </Button>
-        {!configured && (
-          <span className="text-[10px] text-warning flex items-center gap-1">
-            <AlertCircle className="h-3 w-3" /> Não configurado
-          </span>
-        )}
-      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => handleConnect(provider)}
+        className="gap-1.5"
+        disabled={!isAdmin}
+      >
+        {isAdmin ? "Conectar" : "Somente Admin"} <ExternalLink className="h-3 w-3" />
+      </Button>
     );
   };
 
@@ -126,7 +126,7 @@ export default function IntegrationsPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted"><Github className="h-5 w-5" /></div>
               <div><h3 className="font-semibold">GitHub</h3><p className="text-xs text-muted-foreground">Repositórios</p></div>
             </div>
-            <ConnectOrStatus provider="github" configured={isProviderConfigured("github")} />
+            <ConnectOrStatus provider="github" />
           </div>
           {status.github ? (
             <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -153,7 +153,7 @@ export default function IntegrationsPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted"><MessageSquare className="h-5 w-5" /></div>
               <div><h3 className="font-semibold">Slack</h3><p className="text-xs text-muted-foreground">Canais</p></div>
             </div>
-            <ConnectOrStatus provider="slack" configured={isProviderConfigured("slack")} />
+            <ConnectOrStatus provider="slack" />
           </div>
           {status.slack ? (
             <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -179,7 +179,7 @@ export default function IntegrationsPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted"><FolderKanban className="h-5 w-5" /></div>
               <div><h3 className="font-semibold">Jira</h3><p className="text-xs text-muted-foreground">Projetos</p></div>
             </div>
-            <ConnectOrStatus provider="jira" configured={isProviderConfigured("jira")} />
+            <ConnectOrStatus provider="jira" />
           </div>
           {status.jira ? (
             <div className="space-y-2 max-h-64 overflow-y-auto">

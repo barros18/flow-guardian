@@ -7,10 +7,6 @@ export interface IntegrationStatus {
   jira: boolean;
 }
 
-const GITHUB_CLIENT_ID = import.meta.env.VITE_GITHUB_CLIENT_ID || "";
-const SLACK_CLIENT_ID = import.meta.env.VITE_SLACK_CLIENT_ID || "";
-const JIRA_CLIENT_ID = import.meta.env.VITE_JIRA_CLIENT_ID || "";
-
 export function useIntegrations() {
   const [status, setStatus] = useState<IntegrationStatus>({ github: false, slack: false, jira: false });
   const [loading, setLoading] = useState(true);
@@ -29,7 +25,7 @@ export function useIntegrations() {
         body: null,
       });
 
-      // The edge function uses query params, so we need a direct fetch
+      // Use direct fetch with query params since edge function uses URL params
       const res = await fetch(
         `https://iaucpiiptenjomzmseiv.supabase.co/functions/v1/integrations-data?action=status`,
         {
@@ -55,32 +51,31 @@ export function useIntegrations() {
     fetchStatus();
   }, [fetchStatus]);
 
-  const isProviderConfigured = useCallback((provider: "github" | "slack" | "jira"): boolean => {
-    switch (provider) {
-      case "github": return !!GITHUB_CLIENT_ID;
-      case "slack": return !!SLACK_CLIENT_ID;
-      case "jira": return !!JIRA_CLIENT_ID;
+  const initiateOAuth = useCallback(async (provider: "github" | "slack" | "jira") => {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session) {
+      throw new Error("Not authenticated");
     }
-  }, []);
 
-  const getOAuthUrl = useCallback((provider: "github" | "slack" | "jira", userId: string) => {
-    if (!isProviderConfigured(provider)) return null;
-
-    const callbackUrl = `https://iaucpiiptenjomzmseiv.supabase.co/functions/v1/oauth-callback`;
     const appUrl = window.location.origin;
-    const redirectUri = `${callbackUrl}?provider=${provider}&user_id=${userId}&app_url=${encodeURIComponent(appUrl)}`;
+    const res = await fetch(
+      `https://iaucpiiptenjomzmseiv.supabase.co/functions/v1/oauth-init?provider=${provider}&app_url=${encodeURIComponent(appUrl)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.session.access_token}`,
+          apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhdWNwaWlwdGVuam9tem1zZWl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzODY5ODcsImV4cCI6MjA4NTk2Mjk4N30.nGqF1j2fnsLkFX_i3vC67RMCoWXIekwOfy4xw6PYfC8",
+        },
+      }
+    );
 
-    switch (provider) {
-      case "github":
-        return `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo,read:user`;
-      case "slack":
-        return `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=channels:read,chat:write&user_scope=`;
-      case "jira":
-        return `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${JIRA_CLIENT_ID}&scope=read:jira-work%20read:jira-user&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&prompt=consent`;
-      default:
-        return null;
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(errBody.error || `Failed to initiate OAuth: ${res.status}`);
     }
-  }, [isProviderConfigured]);
+
+    const { url } = await res.json();
+    return url as string;
+  }, []);
 
   const fetchProviderData = useCallback(async (provider: "github" | "slack" | "jira") => {
     try {
@@ -103,9 +98,9 @@ export function useIntegrations() {
       return await res.json();
     } catch (err) {
       console.error(`Failed to fetch ${provider} data:`, err);
-      return { connected: false, data: [], error: "Erro de rede ao buscar dados" };
+      return { connected: false, data: [], error: "Network error" };
     }
   }, []);
 
-  return { status, loading, fetchStatus, getOAuthUrl, fetchProviderData, isProviderConfigured };
+  return { status, loading, fetchStatus, initiateOAuth, fetchProviderData };
 }
