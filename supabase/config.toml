@@ -3,5 +3,11 @@ project_id = "iaucpiiptenjomzmseiv"
 [functions.oauth-callback]
 verify_jwt = false
 
+[functions.oauth-init]
+verify_jwt = false
+
 [functions.integrations-data]
+verify_jwt = false
+
+[functions.create-test-users]
 verify_jwt = false

@@ -22,17 +22,12 @@ import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
-interface User {
-  id: string;
+interface UserWithRole {
+  user_id: string;
   name: string;
   email: string;
-  role: UserRole;
   avatar: string;
-}
-
-interface ProfileWithRole extends User {
-  user_id: string;
-  organization_id: string | null;
+  role: UserRole;
 }
 
 interface AuditLog {
@@ -51,46 +46,39 @@ const roleConfig: Record<UserRole, { label: string; icon: React.ElementType; col
 
 export default function UsersPage() {
   const { profile: currentUser } = useAuth();
-  const [users, setUsers] = useState<ProfileWithRole[]>([]);
+  const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
   const [open, setOpen] = useState(false);
-  const [removeTarget, setRemoveTarget] = useState<ProfileWithRole | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<UserWithRole | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   const fetchUsers = async () => {
-    if (!currentUser?.organization_id) return;
     setLoading(true);
     try {
-      // Fetch members from organization_members joined with profiles
-      const { data: membersData, error: mError } = await supabase
-        .from("organization_members")
-        .select(`
-          user_id,
-          role,
-          profiles:user_id (
-            id,
-            name,
-            email,
-            avatar,
-            organization_id
-          )
-        `)
-        .eq("organization_id", currentUser.organization_id);
+      // Fetch all profiles and roles
+      const [{ data: profiles, error: pErr }, { data: roles, error: rErr }] = await Promise.all([
+        supabase.from("profiles").select("user_id, name, email, avatar"),
+        supabase.from("user_roles").select("user_id, role"),
+      ]);
 
-      if (mError) throw mError;
+      if (pErr) throw pErr;
+      if (rErr) throw rErr;
 
-      const mappedUsers: ProfileWithRole[] = (membersData as any[]).map(m => ({
-        id: m.profiles.id,
-        user_id: m.user_id,
-        organization_id: m.profiles.organization_id,
-        name: m.profiles.name,
-        email: m.profiles.email,
-        avatar: m.profiles.avatar,
-        role: m.role as UserRole
+      const roleMap = new Map<string, UserRole>();
+      for (const r of roles || []) {
+        roleMap.set(r.user_id, r.role as UserRole);
+      }
+
+      const mapped: UserWithRole[] = (profiles || []).map((p) => ({
+        user_id: p.user_id,
+        name: p.name,
+        email: p.email,
+        avatar: p.avatar,
+        role: roleMap.get(p.user_id) || "developer",
       }));
 
-      setUsers(mappedUsers);
+      setUsers(mapped);
     } catch (error: any) {
       console.error("Error fetching users:", error);
       toast.error("Erro ao carregar usuários");
@@ -116,11 +104,11 @@ export default function UsersPage() {
     ]);
   };
 
-  const handleRoleChange = async (userId: string, targetUserId: string, role: UserRole) => {
+  const handleRoleChange = async (targetUserId: string, role: UserRole) => {
     try {
       const { error } = await supabase
         .from("user_roles")
-        .upsert({ user_id: targetUserId, role }, { onConflict: "user_id,role" });
+        .upsert({ user_id: targetUserId, role }, { onConflict: "user_id" });
 
       if (error) throw error;
 
@@ -133,61 +121,9 @@ export default function UsersPage() {
     }
   };
 
-  const handleInvite = async () => {
-    if (!inviteEmail || !currentUser?.organization_id) return;
-
-    try {
-      // Find user by email
-      const { data: targetProfile, error: pError } = await supabase
-        .from("profiles")
-        .select("user_id, name")
-        .eq("email", inviteEmail)
-        .maybeSingle();
-
-      if (pError) throw pError;
-      if (!targetProfile) {
-        toast.error("Usuário não encontrado. Peça para ele criar uma conta primeiro.");
-        return;
-      }
-
-      // Add to organization_members
-      const { error: mError } = await supabase
-        .from("organization_members")
-        .insert({
-          user_id: targetProfile.user_id,
-          organization_id: currentUser.organization_id,
-          role: "developer"
-        });
-
-      if (mError) {
-        if (mError.code === "23505") { // Unique constraint violation
-          toast.error("Usuário já faz parte desta organização.");
-        } else {
-          throw mError;
-        }
-        return;
-      }
-
-      // Update target user's profile with organization_id
-      await supabase
-        .from("profiles")
-        .update({ organization_id: currentUser.organization_id })
-        .eq("user_id", targetProfile.user_id);
-
-      addLog("Usuário adicionado", targetProfile.name);
-      toast.success(`${targetProfile.name} adicionado com sucesso!`);
-      setInviteEmail("");
-      setOpen(false);
-      fetchUsers();
-    } catch (error: any) {
-      console.error("Error inviting user:", error);
-      toast.error("Erro ao adicionar usuário");
-    }
-  };
-
   const confirmRemove = () => {
     if (!removeTarget) return;
-    setUsers((prev) => prev.filter((u) => u.id !== removeTarget.id));
+    setUsers((prev) => prev.filter((u) => u.user_id !== removeTarget.user_id));
     addLog("Usuário removido", removeTarget.name);
     toast.success("Usuário removido");
     setRemoveTarget(null);
@@ -198,34 +134,10 @@ export default function UsersPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold mb-1">Usuários</h1>
-          <p className="text-sm text-muted-foreground">Gerencie os membros da organização</p>
+          <p className="text-sm text-muted-foreground">Gerencie os membros do time</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="gradient-primary border-0 gap-2">
-              <UserPlus className="h-4 w-4" /> Convidar
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Convidar usuário</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 mt-4">
-              <Input
-                placeholder="email@empresa.com"
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-              />
-              <Button onClick={handleInvite} className="w-full gradient-primary border-0">
-                Enviar convite
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
 
-      {/* Users table */}
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-4 px-5 py-3 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           <span>Nome</span>
@@ -235,10 +147,9 @@ export default function UsersPage() {
         </div>
         {users.map((user, i) => {
           const rc = roleConfig[user.role];
-          const Icon = rc.icon;
           return (
             <motion.div
-              key={user.id}
+              key={user.user_id}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: i * 0.05 }}
@@ -253,7 +164,7 @@ export default function UsersPage() {
               <span className="text-sm text-muted-foreground">{user.email}</span>
               <Select
                 value={user.role}
-                onValueChange={(val) => handleRoleChange(user.id, user.user_id, val as UserRole)}
+                onValueChange={(val) => handleRoleChange(user.user_id, val as UserRole)}
               >
                 <SelectTrigger className="w-36 h-8 text-xs">
                   <SelectValue />
@@ -277,7 +188,6 @@ export default function UsersPage() {
         })}
       </div>
 
-      {/* Audit logs */}
       {auditLogs.length > 0 && (
         <div className="mt-8">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -286,10 +196,7 @@ export default function UsersPage() {
           </h2>
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             {auditLogs.map((log) => (
-              <div
-                key={log.id}
-                className="flex items-center gap-4 px-5 py-3 border-b border-border last:border-0 text-sm"
-              >
+              <div key={log.id} className="flex items-center gap-4 px-5 py-3 border-b border-border last:border-0 text-sm">
                 <span className="text-muted-foreground text-xs whitespace-nowrap">
                   {formatDistanceToNow(log.timestamp, { addSuffix: true, locale: ptBR })}
                 </span>
@@ -302,13 +209,12 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Remove confirmation */}
       <AlertDialog open={!!removeTarget} onOpenChange={(o) => !o && setRemoveTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remover usuário</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja remover <strong>{removeTarget?.name}</strong> ({removeTarget?.email}) da organização? Esta ação não pode ser desfeita.
+              Tem certeza que deseja remover <strong>{removeTarget?.name}</strong> ({removeTarget?.email})? Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
