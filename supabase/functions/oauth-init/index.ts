@@ -97,7 +97,19 @@ Deno.serve(async (req) => {
 
     // Build OAuth URL
     const callbackUrl = `${supabaseUrl}/functions/v1/oauth-callback`;
-    const appUrl = url.searchParams.get("app_url") || "https://id-preview--6da3db0c-d5ac-4b44-b40b-c1ff6ab25a16.lovable.app";
+    const DEFAULT_APP_URL = "https://id-preview--6da3db0c-d5ac-4b44-b40b-c1ff6ab25a16.lovable.app";
+    const rawAppUrl = url.searchParams.get("app_url");
+    let appUrl = DEFAULT_APP_URL;
+    if (rawAppUrl) {
+      try {
+        const parsed = new URL(rawAppUrl);
+        if (parsed.protocol === "https:" && (parsed.hostname.endsWith(".lovable.app") || parsed.hostname === "localhost")) {
+          appUrl = parsed.origin;
+        }
+      } catch {
+        // Use default
+      }
+    }
 
     let oauthUrl: string;
     const redirectUri = `${callbackUrl}?provider=${provider}&app_url=${encodeURIComponent(appUrl)}`;
@@ -127,7 +139,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("oauth-init error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Internal error" }),
+      JSON.stringify({ error: "Internal error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
