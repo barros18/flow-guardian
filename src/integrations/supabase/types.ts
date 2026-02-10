@@ -203,6 +203,13 @@ export type Database = {
             referencedRelation: "integrations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "integration_installations_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "integrations_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       integrations: {
@@ -591,6 +598,13 @@ export type Database = {
             referencedRelation: "integrations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "slack_channels_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "integrations_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       user_invitations: {
@@ -681,7 +695,56 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      integrations_safe: {
+        Row: {
+          created_at: string | null
+          expires_at: string | null
+          external_account_id: string | null
+          id: string | null
+          organization_id: string | null
+          provider: string | null
+          scopes: string | null
+          status: Database["public"]["Enums"]["integration_status"] | null
+          type: Database["public"]["Enums"]["integration_type"] | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at?: string | null
+          external_account_id?: string | null
+          id?: string | null
+          organization_id?: string | null
+          provider?: string | null
+          scopes?: string | null
+          status?: Database["public"]["Enums"]["integration_status"] | null
+          type?: Database["public"]["Enums"]["integration_type"] | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string | null
+          external_account_id?: string | null
+          id?: string | null
+          organization_id?: string | null
+          provider?: string | null
+          scopes?: string | null
+          status?: Database["public"]["Enums"]["integration_status"] | null
+          type?: Database["public"]["Enums"]["integration_type"] | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integrations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       has_role: {
