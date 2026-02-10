@@ -112,11 +112,8 @@ async function getGithubRepos(accessToken: string) {
 
     if (!res.ok) {
       const errorText = await res.text();
-      let errorData;
-      try { errorData = JSON.parse(errorText); } catch { errorData = { message: errorText }; }
-
-      console.error(`GitHub API error [${res.status}]:`, errorData);
-      throw new Error(errorData.message || `GitHub error ${res.status}`);
+      console.error(`GitHub API error [${res.status}]:`, errorText);
+      throw new Error("GitHub API request failed");
     }
 
     const repos = await res.json();
@@ -136,7 +133,7 @@ async function getGithubRepos(accessToken: string) {
     }));
   } catch (error: any) {
     console.error("Error in getGithubRepos:", error);
-    throw new Error(`Falha ao carregar repositórios do GitHub: ${error.message}`);
+    throw new Error("Failed to fetch GitHub repositories");
   }
 }
 
@@ -166,7 +163,7 @@ async function getSlackChannels(accessToken: string) {
     }));
   } catch (error: any) {
     console.error("Error in getSlackChannels:", error);
-    throw new Error(`Falha ao carregar canais do Slack: ${error.message}`);
+    throw new Error("Failed to fetch Slack channels");
   }
 }
 
@@ -206,11 +203,11 @@ async function getJiraProjects(accessToken: string, cloudId: string) {
     }));
   } catch (error: any) {
     console.error("Error in getJiraProjects:", error);
-    throw new Error(`Falha ao carregar projetos do Jira: ${error.message}`);
+    throw new Error("Failed to fetch Jira projects");
   }
 }
 
-// Helper: Get user Role
+// Helper: Get user Role - throws on DB error to prevent silent auth bypass
 async function getUserRole(userId: string, supabaseClient: any): Promise<string> {
   const { data, error } = await supabaseClient
     .from("user_roles")
@@ -220,9 +217,33 @@ async function getUserRole(userId: string, supabaseClient: any): Promise<string>
 
   if (error) {
     console.error("Error fetching user role:", error);
-    return "developer"; // Default fallback if role not found/error, least privilege
+    throw new Error("Authorization check failed");
   }
   return data?.role || "developer";
+}
+
+// Helper: Safe error messages for clients - strips internal details
+function getSafeProviderError(provider: string): string {
+  const messages: Record<string, string> = {
+    github: "Failed to fetch data from GitHub. Please try again or reconnect.",
+    slack: "Failed to fetch data from Slack. Please try again or reconnect.",
+    jira: "Failed to fetch data from Jira. Please try again or reconnect.",
+  };
+  return messages[provider] || "Failed to fetch data from the provider. Please try again.";
+}
+
+// Helper: Write audit log for sensitive admin actions
+async function writeAuditLog(supabaseClient: any, userId: string, orgId: string | null, action: string) {
+  try {
+    if (!orgId) return;
+    await supabaseClient.from("audit_logs").insert({
+      user_id: userId,
+      organization_id: orgId,
+      action,
+    });
+  } catch (e) {
+    console.error("Failed to write audit log:", e);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -397,6 +418,7 @@ Deno.serve(async (req) => {
           });
         }
 
+        await writeAuditLog(adminSupabase, user.id, orgId, `Role changed for ${targetUserId} to ${newRole}`);
         return new Response(JSON.stringify({ success: true, role: newRole }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -433,6 +455,7 @@ Deno.serve(async (req) => {
         });
       }
 
+      await writeAuditLog(adminSupabase, user.id, orgId, `Account deleted: ${user.id}`);
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -821,8 +844,8 @@ Deno.serve(async (req) => {
       } catch (providerError: any) {
         console.error(`Data action error for ${provider}:`, providerError);
         return new Response(JSON.stringify({
-          error: providerError.message || "Erro inesperado ao buscar dados.",
-          connected: true // Still connected, but failed to fetch data
+          error: getSafeProviderError(provider || "unknown"),
+          connected: true
         }), {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
