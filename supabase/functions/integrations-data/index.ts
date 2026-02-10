@@ -5,6 +5,20 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// --- Input Validation Helpers ---
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const VALID_PROVIDERS = ["github", "slack", "jira"];
+const VALID_ROLES = ["admin", "lead", "developer"];
+const VALID_ACTIONS = ["status", "data", "delete_integration", "update_role", "delete_account", "logs", "connect", "configure", "update_alert_rules", "update_slack_channels", "toggle_pr_block"];
+
+function isValidUUID(val: unknown): val is string {
+  return typeof val === "string" && UUID_REGEX.test(val);
+}
+
+function isValidProvider(val: unknown): val is string {
+  return typeof val === "string" && VALID_PROVIDERS.includes(val);
+}
+
 // Helper function to safely get environment variables without throwing too early
 const getEnv = (key: string) => {
   const value = Deno.env.get(key);
@@ -301,6 +315,22 @@ Deno.serve(async (req) => {
     const action = url.searchParams.get("action");
     const provider = url.searchParams.get("provider");
 
+    // Validate action parameter
+    if (!action || !VALID_ACTIONS.includes(action)) {
+      return new Response(JSON.stringify({ error: "Invalid or missing action parameter." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Validate provider if provided
+    if (provider && !isValidProvider(provider)) {
+      return new Response(JSON.stringify({ error: "Invalid provider parameter." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // --- Action: Status ---
     // --- Action: Status ---
     if (action === "status") {
@@ -398,8 +428,15 @@ Deno.serve(async (req) => {
         const body = await req.json();
         const { targetUserId, newRole } = body;
 
-        if (!targetUserId || !newRole || !["admin", "lead", "developer"].includes(newRole)) {
-          return new Response(JSON.stringify({ error: "Invalid role update parameters." }), {
+        if (!isValidUUID(targetUserId)) {
+          return new Response(JSON.stringify({ error: "Invalid user ID format." }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (!newRole || !VALID_ROLES.includes(newRole)) {
+          return new Response(JSON.stringify({ error: "Invalid role parameter." }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -470,7 +507,8 @@ Deno.serve(async (req) => {
         });
       }
 
-      const limit = Number(url.searchParams.get("limit") || 50);
+      const rawLimit = Number(url.searchParams.get("limit") || 50);
+      const limit = Number.isInteger(rawLimit) && rawLimit > 0 && rawLimit <= 200 ? rawLimit : 50;
 
       try {
         // Assuming an 'integration_logs' table exists for tracking syncs/webhooks
@@ -636,8 +674,32 @@ Deno.serve(async (req) => {
 
       try {
         const body = await req.json();
-        // Expecting: { rule_type: 'stale_pr', threshold_hours: 24, enabled: true }
         const { rule_type, threshold, enabled } = body;
+
+        // Validate rule_type
+        if (typeof rule_type !== "string" || rule_type.length === 0 || rule_type.length > 50) {
+          return new Response(JSON.stringify({ error: "Invalid rule_type parameter." }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Validate threshold (must be a reasonable positive integer)
+        const thresholdNum = Number(threshold);
+        if (!Number.isInteger(thresholdNum) || thresholdNum < 1 || thresholdNum > 720) {
+          return new Response(JSON.stringify({ error: "Threshold must be an integer between 1 and 720." }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Validate enabled is boolean
+        if (typeof enabled !== "boolean") {
+          return new Response(JSON.stringify({ error: "Enabled must be a boolean." }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
 
         const { error: ruleError } = await adminSupabase
           .from("automation_rules")
@@ -731,6 +793,30 @@ Deno.serve(async (req) => {
       try {
         const body = await req.json();
         const { pr_id, is_blocked, reason } = body;
+
+        // Validate pr_id as UUID
+        if (!isValidUUID(pr_id)) {
+          return new Response(JSON.stringify({ error: "Invalid PR ID format." }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Validate is_blocked is boolean
+        if (typeof is_blocked !== "boolean") {
+          return new Response(JSON.stringify({ error: "is_blocked must be a boolean." }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Validate reason length if provided
+        if (reason !== undefined && (typeof reason !== "string" || reason.length > 500)) {
+          return new Response(JSON.stringify({ error: "Reason must be a string under 500 characters." }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
 
         const { error: prError } = await adminSupabase
           .from("pull_requests")

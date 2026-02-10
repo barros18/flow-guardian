@@ -8,6 +8,23 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const DEFAULT_APP_URL = "https://id-preview--6da3db0c-d5ac-4b44-b40b-c1ff6ab25a16.lovable.app";
+const VALID_PROVIDERS = ["github", "slack", "jira"];
+
+// Validate app_url to prevent open redirect attacks
+function validateAppUrl(rawUrl: string | null): string {
+  if (!rawUrl) return DEFAULT_APP_URL;
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "https:") return DEFAULT_APP_URL;
+    if (parsed.hostname.endsWith(".lovable.app") || parsed.hostname === "localhost") {
+      return parsed.origin;
+    }
+    return DEFAULT_APP_URL;
+  } catch {
+    return DEFAULT_APP_URL;
+  }
+}
 
 async function hmacVerify(
   payloadB64: string,
@@ -179,13 +196,11 @@ Deno.serve(async (req) => {
     const code = url.searchParams.get("code");
     const provider = url.searchParams.get("provider");
     const stateParam = url.searchParams.get("state");
-    const appUrl =
-      url.searchParams.get("app_url") ||
-      "https://id-preview--6da3db0c-d5ac-4b44-b40b-c1ff6ab25a16.lovable.app";
+    const appUrl = validateAppUrl(url.searchParams.get("app_url"));
 
-    if (!code || !provider) {
+    if (!code || !provider || !VALID_PROVIDERS.includes(provider)) {
       return new Response(
-        JSON.stringify({ error: "Missing code or provider" }),
+        JSON.stringify({ error: "Missing or invalid code/provider" }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -342,12 +357,11 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error("OAuth callback error:", error);
-    const appUrl = "https://id-preview--6da3db0c-d5ac-4b44-b40b-c1ff6ab25a16.lovable.app";
     return new Response(null, {
       status: 302,
       headers: {
         ...corsHeaders,
-        Location: `${appUrl}/onboarding?error=oauth_failed`,
+        Location: `${DEFAULT_APP_URL}/onboarding?error=oauth_failed`,
       },
     });
   }
